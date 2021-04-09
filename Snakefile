@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## This script follows the recommended gatk workflow for RNA-seq short variant discovery (SNPs + Indels):
+## This script is based on the recommended gatk workflow for RNA-seq short variant discovery (SNPs + Indels):
 ## - https://gatk.broadinstitute.org/hc/en-us/articles/360035531192-RNAseq-short-variant-discovery-SNPs-Indels-
 
 ## Minor adjustments have been made as follows:
@@ -15,97 +15,37 @@
 ##   - The reasoning and process for this is located at https://gatk.broadinstitute.org/hc/en-us/articles/360035890531?id=44 (Section 3)
 
 ## Dictionaries for expanding
-SAMPLES = ["A", "D", "G", "L", "S2", "S4", "S5", "S8"]
-PAIR_ID = ["1", "2"]
+SAMPLES = [
+"1_KB_A10", "2_KB_A11", "3_KB_A1", "4_KB_A6",
+"5_KB_A7", "6_KB_B11", "7_KB_B12", "8_KB_B3",
+"9_KB_B5", "10_KB_B6", "11_KB_B7", "12_KB_B8",
+"13_KB_B9", "14_KB_C10", "15_KB_C11", "16_KB_C12",
+"17_KB_C1", "18_KB_C2", "19_KB_C3", "20_KB_C4",
+"21_KB_C5", "22_KB_C6", "23_KB_C7", "24_KB_C8"
+]
+PAIR_ID = ["R1", "R2"]
 REF_EXT = ["dict", "fa.fai"]
 FQC_EXT = ["zip", "html"]
 VCF_EXT = ["vcf.gz", "vcf.gz.tbi"]
 
 ## Set refs directory and read length
-REFDIR = "/hpcfs/users/a1647910/refs/ensembl-release-94/danio_rerio/"
-READ_LEN = 150
+REFDIR = "/hpcfs/users/a1647910/refs/ensembl-release-101/danio_rerio/"
+READ_LEN = 100
 
 rule all:
 	input:
-		expand(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.{EXT}", EXT = REF_EXT),
+		# expand(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.{EXT}", EXT = REF_EXT),
 		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("01_trimmedData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("02_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		expand("03_markDuplicates/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		expand("12_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT)
+		expand("02_trimmedData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
+		# expand("03_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		# expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		# expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT)
+		expand("02_trimmedData/fastq/{SAMPLE}_{PAIR}.fastq.gz", SAMPLE = SAMPLES, PAIR = PAIR_ID),
+		expand("02_trimmedData/fastq/{SAMPLE}_{PAIR}.fastq.gz", SAMPLE = SAMPLES, PAIR = PAIR_ID)
 
-rule fastqc_raw:
-	input:
-		"00_rawData/fastq/{SAMPLE}.fq.gz"
-	output:
-		"00_rawData/FastQC/{SAMPLE}_fastqc.zip",
-		"00_rawData/FastQC/{SAMPLE}_fastqc.html"
-	params:
-		outDir = "00_rawData/FastQC/"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 1,
-		ntasks = 1,
-		mem_mb = 2000,
-		hours = 1,
-		mins = 0
-	shell:
-		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
-
-rule trim:
-	input:
-		R1 = "00_rawData/fastq/{SAMPLE}_1.fq.gz",
-		R2 = "00_rawData/fastq/{SAMPLE}_2.fq.gz"
-	output:
-		R1 = temp("01_trimmedData/fastq/{SAMPLE}_1.fq.gz"),
-		R2 = temp("01_trimmedData/fastq/{SAMPLE}_2.fq.gz"),
-		setting = "01_trimmedData/fastq/{SAMPLE}.settings",
-		discard = "01_trimmedData/fastq/{SAMPLE}.discarded.gz",
-		single = "01_trimmedData/fastq/{SAMPLE}.singleton.truncated.gz" ## Only for paired end
-	params:
-		bname = "01_trimmedData/fastq/{SAMPLE}"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 1,
-		ntasks = 2,
-		mem_mb = 2000,
-		hours = 2,
-		mins = 0
-	shell:
-		"""
-		AdapterRemoval --gzip \
-		--file1 {input.R1} \
-		--file2 {input.R2} \
-		--output1 {output.R1} \
-		--output2 {output.R2} \
-		--basename {params.bname} \
-		--trimns \
-		--trimqualities \
-		--minquality 20 \
-		--minlength 35 \
-		--threads {resources.cpu}
-		"""
-
-rule fastqc_trim:
-	input:
-		"01_trimmedData/fastq/{SAMPLE}.fq.gz"
-	output:
-		"01_trimmedData/FastQC/{SAMPLE}_fastqc.zip",
-		"01_trimmedData/FastQC/{SAMPLE}_fastqc.html"
-	params:
-		outDir = "01_trimmedData/FastQC/"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 1,
-		ntasks = 1,
-		mem_mb = 2000,
-		hours = 1,
-		mins = 0
-	shell:
-		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
+###########################
+## Build reference files ##
+###########################
 
 rule unzip_refFa:
 	input:
@@ -126,7 +66,7 @@ rule unzip_refFa:
 rule star_index:
 	input:
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
-		gtf = REFDIR + "Danio_rerio.GRCz11.94.chr.gtf.gz"
+		gtf = REFDIR + "Danio_rerio.GRCz11.101.chr.gtf.gz"
 	output:
 		temp(directory(REFDIR + "star/"))
 	params:
@@ -144,115 +84,15 @@ rule star_index:
 		zcat {input.gtf} > temp.gtf
 
 		STAR \
-		--runThreadN {resources.cpu} \
-		--runMode genomeGenerate \
-		--genomeDir {output} \
-		--genomeFastaFiles {input.refFa} \
-		--sjdbGTFfile temp.gtf \
-		--sjdbOverhang {params.overhang}
+			--runThreadN {resources.cpu} \
+			--runMode genomeGenerate \
+			--genomeDir {output} \
+			--genomeFastaFiles {input.refFa} \
+			--sjdbGTFfile temp.gtf \
+			--sjdbOverhang {params.overhang}
 
 		rm temp.gtf
 		"""
-
-rule align:
-	input:
-		R1 = "01_trimmedData/fastq/{SAMPLE}_1.fq.gz",
-		R2 = "01_trimmedData/fastq/{SAMPLE}_2.fq.gz",
-		starIndex = REFDIR + "star/"
-	output:
-		temp("02_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam")
-	params:
-		overhang = READ_LEN-1,
-		bname = "02_alignedData/bam/{SAMPLE}_"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 16,
-		ntasks = 1,
-		mem_mb = 32000,
-		hours = 5,
-		mins = 0
-	shell:
-		"""
-		STAR \
-		--genomeDir {input.starIndex}\
-		--runThreadN {resources.cpu} \
-		--readFilesIn {input.R1} {input.R2} \
-		--readFilesCommand "gunzip -c" \
-		--sjdbOverhang {params.overhang} \
-		--outSAMtype BAM SortedByCoordinate \
-		--twopassMode Basic \
-		--outFileNamePrefix {params.bname}
-
-
-		mkdir -p 02_alignedData/log
-		mv {params.bname}*out 02_alignedData/log
-		mv {params.bname}*tab 02_alignedData/log
-		"""
-
-rule fastqc_align:
-	input:
-		"02_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam"
-	output:
-		"02_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.zip",
-		"02_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.html"
-	params:
-		outDir = "02_alignedData/FastQC/"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 1,
-		ntasks = 1,
-		mem_mb = 2000,
-		hours = 1,
-		mins = 0
-	shell:
-		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
-
-rule mark_duplicates:
-	input:
-		"02_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam"
-	output:
-		bam = temp("03_markDuplicates/bam/{SAMPLE}.bam"),
-		bamIndex = temp("03_markDuplicates/bam/{SAMPLE}.bai"),
-		metrics = "03_markDuplicates/log/{SAMPLE}.metrics"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 2,
-		ntasks = 1,
-		mem_mb = 4000,
-		hours = 4,
-		mins = 0
-	shell:
-		"""
-		gatk \
- 	    	MarkDuplicates \
- 	        --INPUT {input} \
- 	        --OUTPUT {output.bam}  \
- 	        --CREATE_INDEX true \
- 	        --VALIDATION_STRINGENCY SILENT \
- 	        --METRICS_FILE {output.metrics}
-		"""
-
-rule fastqc_duplicates:
-	input:
-		"03_markDuplicates/bam/{SAMPLE}.bam"
-	output:
-		"03_markDuplicates/FastQC/{SAMPLE}_fastqc.zip",
-		"03_markDuplicates/FastQC/{SAMPLE}_fastqc.html"
-	params:
-		outDir = "03_markDuplicates/FastQC/"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 1,
-		ntasks = 1,
-		mem_mb = 2000,
-		hours = 1,
-		mins = 0
-	shell:
-		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
 
 ## Reference dictionary and index needs to be created as described in:
 ## https://gatk.broadinstitute.org/hc/en-us/articles/360035531652-FASTA-Reference-genome-format
@@ -288,16 +128,256 @@ rule ref_index:
 	shell:
 		"samtools faidx {input}"
 
+####################
+## Begin workflow ##
+####################
+
+rule fastqc_raw:
+	input:
+		"00_rawData/fastq/{SAMPLE}.fastq.gz"
+	output:
+		"00_rawData/FastQC/{SAMPLE}_fastqc.zip",
+		"00_rawData/FastQC/{SAMPLE}_fastqc.html"
+	params:
+		outDir = "00_rawData/FastQC/"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 2000,
+		hours = 1,
+		mins = 0
+	shell:
+		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
+
+rule addUmi:
+	input:
+		# R1 = "00_rawData/fastq/10_KB_B6_R1.fastq.gz",
+		# R2 = "00_rawData/fastq/10_KB_B6_R2.fastq.gz",
+		# UMI = "00_rawData/fastq/10_KB_B6_I1.fastq.gz"
+		R1 = "00_rawData/fastq/{SAMPLE}_R1.fastq.gz",
+		R2 = "00_rawData/fastq/{SAMPLE}_R2.fastq.gz",
+		UMI = "00_rawData/fastq/{SAMPLE}_I1.fastq.gz"
+	output:
+		# R1 = temp("01_addUmi/fastq/10_KB_B6_R1.fastq.gz"),
+		# R2 = temp("01_addUmi/fastq/10_KB_B6_R2.fastq.gz"),
+		# UMI1 = temp("01_addUmi/fastq/10_KB_B6_I1.fastq.gz"),
+		# UMI2 = temp("01_addUmi/fastq/10_KB_B6_I2.fastq.gz"),
+		# html = "01_addUmi/log/10_KB_B6.html"
+		R1 = temp("01_addUmi/fastq/{SAMPLE}_R1.fastq.gz"),
+		R2 = temp("01_addUmi/fastq/{SAMPLE}_R2.fastq.gz"),
+		UMI1 = temp("01_addUmi/fastq/{SAMPLE}_I1.fastq.gz"),
+		UMI2 = temp("01_addUmi/fastq/{SAMPLE}_I2.fastq.gz"),
+		html = "01_addUmi/log/{SAMPLE}.html"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 2,
+		mem_mb = 4000,
+		hours = 1,
+		mins = 0
+	shell:
+		"""
+		fastp \
+        	-i {input.R1}  \
+        	-I {input.UMI}  \
+        	-o {output.R1} \
+        	-O {output.UMI1} \
+        	--html {output.html} \
+			--json /dev/null \
+        	--umi --umi_loc=read2 --umi_len=8 \
+        	-G -Q -A -L -w 1 -u 100 -n 8 -Y 100
+
+   		fastp \
+        	-i {input.R2}  \
+        	-I {input.UMI}  \
+        	-o {output.R2} \
+        	-O {output.UMI2} \
+			--html /dev/null \
+			--json /dev/null \
+        	--umi --umi_loc=read2 --umi_len=8 \
+        	-G -Q -A -L -w 1 -u 100 -n 8 -Y 100
+		"""
+
+rule trim:
+	input:
+		# R1 = "01_addUmi/fastq/10_KB_B6_R1.fastq.gz",
+		# R2 = "01_addUmi/fastq/10_KB_B6_R2.fastq.gz"
+		R1 = "01_addUmi/fastq/{SAMPLE}_R1.fastq.gz",
+		R2 = "01_addUmi/fastq/{SAMPLE}_R2.fastq.gz"
+	output:
+		# R1 = temp("02_trimmedData/fastq/10_KB_B6_R1.fastq.gz"),
+		# R2 = temp("02_trimmedData/fastq/10_KB_B6_R2.fastq.gz"),
+		# html = "02_trimmedData/fastq/10_KB_B6.html"
+		R1 = temp("02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz"),
+		R2 = temp("02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz"),
+		html = "02_trimmedData/log/{SAMPLE}.html"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 2,
+		mem_mb = 2000,
+		hours = 2,
+		mins = 0
+	shell:
+		"""
+		fastp \
+			-i {input.R1}  \
+        	-I {input.R2}  \
+        	-o {output.R1} \
+        	-O {output.R2} \
+			--qualified_quality_phred 20 \
+			--length_required 35 \
+			--unqualified_percent_limit 100 \
+			--complexity_threshold 100 \
+			--cut_front \
+			--cut_tail \
+			--trim_poly_g \
+			--thread 1 \
+			--html {output.html} \
+			--json /dev/null \
+		"""
+
+rule fastqc_trim:
+	input:
+		"02_trimmedData/fastq/{SAMPLE}.fastq.gz"
+	output:
+		"02_trimmedData/FastQC/{SAMPLE}_fastqc.zip",
+		"02_trimmedData/FastQC/{SAMPLE}_fastqc.html"
+	params:
+		outDir = "02_trimmedData/FastQC/"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 2000,
+		hours = 1,
+		mins = 0
+	shell:
+		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
+
+rule align:
+	input:
+		R1 = "02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz",
+		R2 = "02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz",
+		starIndex = REFDIR + "star/"
+	output:
+		bam = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"),
+		bamIndex = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bai")
+	params:
+		overhang = READ_LEN-1,
+		bname = "03_alignedData/bam/{SAMPLE}"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 16,
+		ntasks = 1,
+		mem_mb = 32000,
+		hours = 5,
+		mins = 0
+	shell:
+		"""
+		STAR \
+		--genomeDir {input.starIndex}\
+		--runThreadN {resources.cpu} \
+		--readFilesIn {input.R1} {input.R2} \
+		--readFilesCommand "gunzip -c" \
+		--sjdbOverhang {params.overhang} \
+		--outSAMtype BAM SortedByCoordinate \
+		--twopassMode Basic \
+		--outFileNamePrefix {params.bname}
+
+
+		mkdir -p 03_alignedData/log
+		mv {params.bname}*out 03_alignedData/log
+		mv {params.bname}*tab 03_alignedData/log
+
+		samtools index {output.bam}
+		"""
+
+rule fastqc_align:
+	input:
+		"03_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam"
+	output:
+		"03_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.zip",
+		"03_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.html"
+	params:
+		outDir = "03_alignedData/FastQC/"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 2000,
+		hours = 1,
+		mins = 0
+	shell:
+		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
+
+rule dedupUmis:
+	input:
+		bam = "03_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam",
+		bamIndex = "03_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bai"
+	output:
+		bam = temp("04_dedupUmis/bam/{SAMPLE}.bam"),
+		bamIndex = temp("04_dedupUmis/bam/{SAMPLE}.bai"),
+		log = "04_dedupUmis/log/{SAMPLE}.log",
+		statsPrefix = "04_dedupUmis/log/{SAMPLE}"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 2,
+		ntasks = 1,
+		mem_mb = 4000,
+		hours = 4,
+		mins = 0
+	shell:
+		"""
+		umi_tools dedup \
+    		-I {input.bam} \
+    		-L {output.log} \
+    		-S {output.bam} \
+    		--umi-separator=":" \
+    		--temp-dir=. \
+    		--paired \
+    		--output-stats={output.statsPrefix}
+
+    	samtools index {output.bam}
+		"""
+
+rule fastqc_dedup:
+	input:
+		"04_dedupUmis/bam/{SAMPLE}.bam"
+	output:
+		"04_dedupUmis/FastQC/{SAMPLE}_fastqc.zip",
+		"04_dedupUmis/FastQC/{SAMPLE}_fastqc.html"
+	params:
+		outDir = "04_dedupUmis/FastQC/"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 2000,
+		hours = 1,
+		mins = 0
+	shell:
+		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
+
 rule splitNCigar:
 	input:
-		bam = "03_markDuplicates/bam/{SAMPLE}.bam",
-		bamIndex = "03_markDuplicates/bam/{SAMPLE}.bai",
+		bam = "04_dedupUmis/bam/{SAMPLE}.bam",
+		bamIndex = "04_dedupUmis/bam/{SAMPLE}.bai",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict"
 	output:
-		bam = temp("04_splitNCigar/bam/{SAMPLE}.bam"),
-		bamIndex = temp("04_splitNCigar/bam/{SAMPLE}.bai")
+		bam = temp("05_splitNCigar/bam/{SAMPLE}.bam"),
+		bamIndex = temp("05_splitNCigar/bam/{SAMPLE}.bai")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -319,11 +399,11 @@ rule splitNCigar:
 ## An explanation of this is found at https://gatk.broadinstitute.org/hc/en-us/articles/360035890671-Read-groups
 rule addRG:
 	input:
-		bam = "04_splitNCigar/bam/{SAMPLE}.bam",
-		bamIndex = "04_splitNCigar/bam/{SAMPLE}.bai"
+		bam = "05_splitNCigar/bam/{SAMPLE}.bam",
+		bamIndex = "05_splitNCigar/bam/{SAMPLE}.bai"
 	output:
-		bam = temp("05_addRG/bam/{SAMPLE}.bam"),
-		bamIndex = temp("05_addRG/bam/{SAMPLE}.bai")
+		bam = temp("06_addRG/bam/{SAMPLE}.bam"),
+		bamIndex = temp("06_addRG/bam/{SAMPLE}.bai")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -350,14 +430,14 @@ rule addRG:
 ## This step allows for defining a known set of variants based on the data, opposed to using a pre-existing database
 rule callVariants_noRecal:
 	input:
-		bam = "05_addRG/bam/{SAMPLE}.bam",
-		bamIndex = "05_addRG/bam/{SAMPLE}.bai",
+		bam = "06_addRG/bam/{SAMPLE}.bam",
+		bamIndex = "06_addRG/bam/{SAMPLE}.bai",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict"
 	output:
-		vcf = temp("06_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz"),
-		vcfIndex = temp("06_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz.tbi")
+		vcf = temp("07_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz"),
+		vcfIndex = temp("07_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz.tbi")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -379,14 +459,14 @@ rule callVariants_noRecal:
 
 rule knownVariants:
 	input:
-		vcf = "06_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz",
-		vcfIndex = "06_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz.tbi",
+		vcf = "07_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz",
+		vcfIndex = "07_callVariants_noRecal/vcf/{SAMPLE}.vcf.gz.tbi",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict"
 	output:
-		vcf = temp("07_knownVariants/vcf/{SAMPLE}.vcf.gz"),
-		vcfIndex = temp("07_knownVariants/vcf/{SAMPLE}.vcf.gz.tbi")
+		vcf = temp("08_knownVariants/vcf/{SAMPLE}.vcf.gz"),
+		vcfIndex = temp("08_knownVariants/vcf/{SAMPLE}.vcf.gz.tbi")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -413,15 +493,15 @@ rule knownVariants:
 ## We now follow the GATK workflow as normal
 rule baseRecal:
 	input:
-		bam = "05_addRG/bam/{SAMPLE}.bam",
-		bamIndex = "05_addRG/bam/{SAMPLE}.bai",
+		bam = "06_addRG/bam/{SAMPLE}.bam",
+		bamIndex = "06_addRG/bam/{SAMPLE}.bai",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict",
-		dbsnp = "07_knownVariants/vcf/{SAMPLE}.vcf.gz",
-		dbsnpIndex = "07_knownVariants/vcf/{SAMPLE}.vcf.gz.tbi"
+		dbsnp = "08_knownVariants/vcf/{SAMPLE}.vcf.gz",
+		dbsnpIndex = "08_knownVariants/vcf/{SAMPLE}.vcf.gz.tbi"
 	output:
-		temp("08_baseRecal/{SAMPLE}_recal")
+		temp("09_baseRecal/{SAMPLE}_recal")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -445,15 +525,15 @@ rule baseRecal:
 
 rule applyRecal:
 	input:
-		bam = "05_addRG/bam/{SAMPLE}.bam",
-		bamIndex = "05_addRG/bam/{SAMPLE}.bai",
+		bam = "06_addRG/bam/{SAMPLE}.bam",
+		bamIndex = "06_addRG/bam/{SAMPLE}.bai",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict",
-		recal = "08_baseRecal/{SAMPLE}_recal"
+		recal = "09_baseRecal/{SAMPLE}_recal"
 	output:
-		bam = temp("09_applyRecal/bam/{SAMPLE}.bam"),
-		bamIndex = temp("09_applyRecal/bam/{SAMPLE}.bai")
+		bam = temp("10_applyRecal/bam/{SAMPLE}.bam"),
+		bamIndex = temp("10_applyRecal/bam/{SAMPLE}.bai")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -479,14 +559,14 @@ rule applyRecal:
 
 rule callVariants:
 	input:
-		bam = "09_applyRecal/bam/{SAMPLE}.bam",
-		bamIndex = "09_applyRecal/bam/{SAMPLE}.bai",
+		bam = "10_applyRecal/bam/{SAMPLE}.bam",
+		bamIndex = "10_applyRecal/bam/{SAMPLE}.bai",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict"
 	output:
-		vcf = temp("10_callVariants/vcf/{SAMPLE}.vcf.gz"),
-		vcfIndex = temp("10_callVariants/vcf/{SAMPLE}.vcf.gz.tbi")
+		vcf = temp("11_callVariants/vcf/{SAMPLE}.vcf.gz"),
+		vcfIndex = temp("11_callVariants/vcf/{SAMPLE}.vcf.gz.tbi")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -508,14 +588,14 @@ rule callVariants:
 
 rule filterVariants:
 	input:
-		vcf = "10_callVariants/vcf/{SAMPLE}.vcf.gz",
-		vcfIndex = "10_callVariants/vcf/{SAMPLE}.vcf.gz.tbi",
+		vcf = "11_callVariants/vcf/{SAMPLE}.vcf.gz",
+		vcfIndex = "11_callVariants/vcf/{SAMPLE}.vcf.gz.tbi",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict"
 	output:
-		vcf = temp("11_filterVariants/vcf/{SAMPLE}.vcf.gz"),
-		vcfIndex = temp("11_filterVariants/vcf/{SAMPLE}.vcf.gz.tbi")
+		vcf = temp("12_filterVariants/vcf/{SAMPLE}.vcf.gz"),
+		vcfIndex = temp("12_filterVariants/vcf/{SAMPLE}.vcf.gz.tbi")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -541,11 +621,11 @@ rule filterVariants:
 
 rule selectVariants:
 	input:
-		vcf = "11_filterVariants/vcf/{SAMPLE}.vcf.gz",
+		vcf = "12_filterVariants/vcf/{SAMPLE}.vcf.gz",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa"
 	output:
-		vcf = temp("12_selectVariants/vcf/{SAMPLE}.vcf.gz"),
-		vcfIndex = temp("12_selectVariants/vcf/{SAMPLE}.vcf.gz.tbi")
+		vcf = temp("13_selectVariants/vcf/{SAMPLE}.vcf.gz"),
+		vcfIndex = temp("13_selectVariants/vcf/{SAMPLE}.vcf.gz.tbi")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -566,11 +646,11 @@ rule selectVariants:
 
 rule mergeSelected:
 	input:
-		vcf = expand("12_selectVariants/vcf/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
-		vcfIndex = expand("12_selectVariants/vcf/{SAMPLE}.vcf.gz.tbi", SAMPLE = SAMPLES)
+		vcf = expand("13_selectVariants/vcf/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
+		vcfIndex = expand("13_selectVariants/vcf/{SAMPLE}.vcf.gz.tbi", SAMPLE = SAMPLES)
 	output:
-		vcf = "12_selectVariants/mergedVcf/mergedVcf.vcf.gz",
-		vcfIndex = "12_selectVariants/mergedVcf/mergedVcf.vcf.gz.tbi"
+		vcf = "13_selectVariants/mergedVcf/mergedVcf.vcf.gz",
+		vcfIndex = "13_selectVariants/mergedVcf/mergedVcf.vcf.gz.tbi"
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
