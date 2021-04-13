@@ -28,7 +28,7 @@ REF_EXT = ["dict", "fa.fai"]
 FQC_EXT = ["zip", "html"]
 VCF_EXT = ["vcf.gz", "vcf.gz.tbi"]
 
-## Set refs directory and read length
+## Set variables that may change between datasets
 REFDIR = "/hpcfs/users/a1647910/refs/ensembl-release-101/danio_rerio/"
 READ_LEN = 100
 
@@ -37,11 +37,13 @@ rule all:
 		# expand(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.{EXT}", EXT = REF_EXT),
 		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("02_trimmedData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		# expand("03_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		expand("03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
 		# expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		"03_alignedData/featureCounts/genes.out"
 		# expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT)
-		expand("02_trimmedData/fastq/{SAMPLE}_{PAIR}.fastq.gz", SAMPLE = SAMPLES, PAIR = PAIR_ID),
-		expand("02_trimmedData/fastq/{SAMPLE}_{PAIR}.fastq.gz", SAMPLE = SAMPLES, PAIR = PAIR_ID)
+
+		# expand("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam", SAMPLE = SAMPLES),
+		# expand("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai", SAMPLE = SAMPLES)
 
 ###########################
 ## Build reference files ##
@@ -61,7 +63,7 @@ rule unzip_refFa:
 		hours = 0,
 		mins = 30
 	shell:
-		"gunzip -k {input}"
+		"gunzip -c {input} > {output}"
 
 rule star_index:
 	input:
@@ -128,9 +130,9 @@ rule ref_index:
 	shell:
 		"samtools faidx {input}"
 
-####################
-## Begin workflow ##
-####################
+################################################
+## Workflow for counting alleles at SNV sites ##
+################################################
 
 rule fastqc_raw:
 	input:
@@ -262,12 +264,16 @@ rule fastqc_trim:
 
 rule align:
 	input:
+		# R1 = "02_trimmedData/fastq/10_KB_B6_R1.fastq.gz",
+		# R2 = "02_trimmedData/fastq/10_KB_B6_R2.fastq.gz",
 		R1 = "02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz",
 		R2 = "02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz",
 		starIndex = REFDIR + "star/"
 	output:
+		# bam = temp("03_alignedData/bam/10_KB_B6Aligned.sortedByCoord.out.bam"),
+		# bamIndex = temp("03_alignedData/bam/10_KB_B6Aligned.sortedByCoord.out.bai")
 		bam = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"),
-		bamIndex = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bai")
+		bamIndex = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai")
 	params:
 		overhang = READ_LEN-1,
 		bname = "03_alignedData/bam/{SAMPLE}"
@@ -301,10 +307,10 @@ rule align:
 
 rule fastqc_align:
 	input:
-		"03_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam"
+		"03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"
 	output:
-		"03_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.zip",
-		"03_alignedData/FastQC/{SAMPLE}_Aligned.sortedByCoord.out_fastqc.html"
+		"03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.zip",
+		"03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.html"
 	params:
 		outDir = "03_alignedData/FastQC/"
 	conda:
@@ -317,6 +323,36 @@ rule fastqc_align:
 		mins = 0
 	shell:
 		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
+
+rule featureCounts:
+	input:
+		bam = expand("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam", SAMPLE = SAMPLES),
+		gtf = REFDIR + "Danio_rerio.GRCz11.101.chr.gtf.gz"
+	output:
+		counts = "03_alignedData/featureCounts/counts.out",
+		sumary = "03_alignedData/featureCounts/counts.out.summary",
+		genes = "03_alignedData/featureCounts/genes.out"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 2,
+		ntasks = 2,
+		mem_mb = 4000,
+		hours = 2,
+		mins = 0
+	shell:
+		"""
+		featureCounts -Q 10 \
+		  -s 0 \
+		  -T 4 \
+		  -p \
+		  -a {input.gtf} \
+		  -o {output.counts} {input.bam}
+
+		## Storing the output in a single file
+		cut -f1,7- {output.counts} | \
+		sed 1d > {output.genes}
+		"""
 
 rule dedupUmis:
 	input:
