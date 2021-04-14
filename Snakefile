@@ -14,7 +14,7 @@
 ##   - It is better to therefore generate a set of known variants from our data than to use pre-defined ones in a database (dbSNP , Ensembl)
 ##   - The reasoning and process for this is located at https://gatk.broadinstitute.org/hc/en-us/articles/360035890531?id=44 (Section 3)
 
-## Dictionaries for expanding
+## Lists for expanding
 SAMPLES = [
 "1_KB_A10", "2_KB_A11", "3_KB_A1", "4_KB_A6",
 "5_KB_A7", "6_KB_B11", "7_KB_B12", "8_KB_B3",
@@ -38,12 +38,10 @@ rule all:
 		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("02_trimmedData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		# expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		"03_alignedData/featureCounts/genes.out"
+		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		"03_alignedData/featureCounts/genes.out",
 		# expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT)
-
-		# expand("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam", SAMPLE = SAMPLES),
-		# expand("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai", SAMPLE = SAMPLES)
+		expand("05_splitNCigar/bam/{SAMPLE}.bam", SAMPLE = SAMPLES)
 
 ###########################
 ## Build reference files ##
@@ -155,18 +153,10 @@ rule fastqc_raw:
 
 rule addUmi:
 	input:
-		# R1 = "00_rawData/fastq/10_KB_B6_R1.fastq.gz",
-		# R2 = "00_rawData/fastq/10_KB_B6_R2.fastq.gz",
-		# UMI = "00_rawData/fastq/10_KB_B6_I1.fastq.gz"
 		R1 = "00_rawData/fastq/{SAMPLE}_R1.fastq.gz",
 		R2 = "00_rawData/fastq/{SAMPLE}_R2.fastq.gz",
 		UMI = "00_rawData/fastq/{SAMPLE}_I1.fastq.gz"
 	output:
-		# R1 = temp("01_addUmi/fastq/10_KB_B6_R1.fastq.gz"),
-		# R2 = temp("01_addUmi/fastq/10_KB_B6_R2.fastq.gz"),
-		# UMI1 = temp("01_addUmi/fastq/10_KB_B6_I1.fastq.gz"),
-		# UMI2 = temp("01_addUmi/fastq/10_KB_B6_I2.fastq.gz"),
-		# html = "01_addUmi/log/10_KB_B6.html"
 		R1 = temp("01_addUmi/fastq/{SAMPLE}_R1.fastq.gz"),
 		R2 = temp("01_addUmi/fastq/{SAMPLE}_R2.fastq.gz"),
 		UMI1 = temp("01_addUmi/fastq/{SAMPLE}_I1.fastq.gz"),
@@ -205,14 +195,9 @@ rule addUmi:
 
 rule trim:
 	input:
-		# R1 = "01_addUmi/fastq/10_KB_B6_R1.fastq.gz",
-		# R2 = "01_addUmi/fastq/10_KB_B6_R2.fastq.gz"
 		R1 = "01_addUmi/fastq/{SAMPLE}_R1.fastq.gz",
 		R2 = "01_addUmi/fastq/{SAMPLE}_R2.fastq.gz"
 	output:
-		# R1 = temp("02_trimmedData/fastq/10_KB_B6_R1.fastq.gz"),
-		# R2 = temp("02_trimmedData/fastq/10_KB_B6_R2.fastq.gz"),
-		# html = "02_trimmedData/fastq/10_KB_B6.html"
 		R1 = temp("02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz"),
 		R2 = temp("02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz"),
 		html = "02_trimmedData/log/{SAMPLE}.html"
@@ -264,14 +249,10 @@ rule fastqc_trim:
 
 rule align:
 	input:
-		# R1 = "02_trimmedData/fastq/10_KB_B6_R1.fastq.gz",
-		# R2 = "02_trimmedData/fastq/10_KB_B6_R2.fastq.gz",
 		R1 = "02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz",
 		R2 = "02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz",
 		starIndex = REFDIR + "star/"
 	output:
-		# bam = temp("03_alignedData/bam/10_KB_B6Aligned.sortedByCoord.out.bam"),
-		# bamIndex = temp("03_alignedData/bam/10_KB_B6Aligned.sortedByCoord.out.bai")
 		bam = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"),
 		bamIndex = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai")
 	params:
@@ -356,20 +337,21 @@ rule featureCounts:
 
 rule dedupUmis:
 	input:
-		bam = "03_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bam",
-		bamIndex = "03_alignedData/bam/{SAMPLE}_Aligned.sortedByCoord.out.bai"
+		bam = "03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam",
+		bamIndex = "03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai"
 	output:
 		bam = temp("04_dedupUmis/bam/{SAMPLE}.bam"),
-		bamIndex = temp("04_dedupUmis/bam/{SAMPLE}.bai"),
-		log = "04_dedupUmis/log/{SAMPLE}.log",
+		bamIndex = temp("04_dedupUmis/bam/{SAMPLE}.bam.bai"),
+		log = "04_dedupUmis/log/{SAMPLE}.log"
+	params:
 		statsPrefix = "04_dedupUmis/log/{SAMPLE}"
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
-		cpu = 2,
+		cpu = 1,
 		ntasks = 1,
-		mem_mb = 4000,
-		hours = 4,
+		mem_mb = 32000,
+		hours = 6,
 		mins = 0
 	shell:
 		"""
@@ -380,7 +362,7 @@ rule dedupUmis:
     		--umi-separator=":" \
     		--temp-dir=. \
     		--paired \
-    		--output-stats={output.statsPrefix}
+    		--output-stats={params.statsPrefix}
 
     	samtools index {output.bam}
 		"""
@@ -399,7 +381,7 @@ rule fastqc_dedup:
 		cpu = 1,
 		ntasks = 1,
 		mem_mb = 2000,
-		hours = 1,
+		hours = 2,
 		mins = 0
 	shell:
 		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"
@@ -407,7 +389,7 @@ rule fastqc_dedup:
 rule splitNCigar:
 	input:
 		bam = "04_dedupUmis/bam/{SAMPLE}.bam",
-		bamIndex = "04_dedupUmis/bam/{SAMPLE}.bai",
+		bamIndex = "04_dedupUmis/bam/{SAMPLE}.bam.bai",
 		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict"
