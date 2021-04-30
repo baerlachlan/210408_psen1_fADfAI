@@ -34,14 +34,13 @@ READ_LEN = 100
 
 rule all:
 	input:
-		# expand(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.{EXT}", EXT = REF_EXT),
 		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("02_trimmedData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
 		"03_alignedData/featureCounts/genes.out",
-		# expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT)
-		expand("05_splitNCigar/bam/{SAMPLE}.bam", SAMPLE = SAMPLES)
+		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT),
+#		expand("14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv", SAMPLE = SAMPLES)
 
 ###########################
 ## Build reference files ##
@@ -460,9 +459,9 @@ rule callVariants_noRecal:
 		"snakemake/envs/default.yaml"
 	resources:
 		cpu = 1,
-		ntasks = 2,
+		ntasks = 1,
 		mem_mb = 8000,
-		hours = 24,
+		hours = 72,
 		mins = 0
 	shell:
 		"""
@@ -491,8 +490,8 @@ rule knownVariants:
 		cpu = 1,
 		ntasks = 2,
 		mem_mb = 1000,
-		hours = 0,
-		mins = 1
+		hours = 2,
+		mins = 0
 	shell:
 		"""
 		gatk \
@@ -526,7 +525,7 @@ rule baseRecal:
 		cpu = 1,
 		ntasks = 2,
 		mem_mb = 4000,
-		hours = 1,
+		hours = 2,
 		mins = 0
 	shell:
 		"""
@@ -558,7 +557,7 @@ rule applyRecal:
 		cpu = 1,
 		ntasks = 2,
 		mem_mb = 4000,
-		hours = 4,
+		hours = 8,
 		mins = 0
 	shell:
 		"""
@@ -591,7 +590,7 @@ rule callVariants:
 		cpu = 1,
 		ntasks = 2,
 		mem_mb = 8000,
-		hours = 24,
+		hours = 72,
 		mins = 0
 	shell:
 		"""
@@ -621,7 +620,7 @@ rule filterVariants:
 		ntasks = 2,
 		mem_mb = 1000,
 		hours = 0,
-		mins = 10
+		mins = 30
 	shell:
 		"""
 		gatk \
@@ -649,9 +648,9 @@ rule selectVariants:
 	resources:
 		cpu = 1,
 		ntasks = 1,
-		mem_mb = 200,
+		mem_mb = 2000,
 		hours = 0,
-		mins = 10
+		mins = 30
 	shell:
 		"""
 		gatk \
@@ -675,10 +674,43 @@ rule mergeSelected:
 		cpu = 4,
 		ntasks = 2,
 		mem_mb = 2000,
-		hours = 1,
+		hours = 2,
 		mins = 0
 	shell:
 		"""
 		bcftools merge --threads {resources.cpu} -o {output.vcf} -O z {input.vcf}
 		bcftools index --threads {resources.cpu} -t {output.vcf}
+		"""
+
+rule countAlleles:
+	input:
+		bam = "10_applyRecal/bam/{SAMPLE}.bam",
+		bamIndex = "10_applyRecal/bam/{SAMPLE}.bai",
+		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
+		intervals = "14_countAlleles/intervals/snvs.intervals"
+	output:
+		counts = "14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 4000,
+		hours = 1,
+		mins = 0
+	shell:
+		"""
+		gatk \
+			CollectAllelicCounts \
+			-I {input.bam} \
+			-R {input.refFa} \
+			-L {input.intervals} \
+			-O {output.counts} \
+			--read-filter NotSecondaryAlignmentReadFilter \
+			--read-filter GoodCigarReadFilter \
+			--read-filter PassesVendorQualityCheckReadFilter \
+			--read-filter MappingQualityAvailableReadFilter
+
+		## Remove header
+		sed -i '/^@/d' {output.counts}
 		"""
