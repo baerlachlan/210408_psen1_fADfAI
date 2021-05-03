@@ -64,8 +64,8 @@ The first step is to convert the merged `VCF` file containing variants in all sa
 `GDS` objects allow for easy access of the data in `R`.
 
 ```{r makeGds}
-vcfPath <- "/hpcfs/users/a1647910/210305_fmr1_snv/12_selectVariants/mergedVcf/mergedVcf.vcf.gz"
-gdsPath <- "/hpcfs/users/a1647910/210305_fmr1_snv/12_selectVariants/gds/mergedGds.gds"
+vcfPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/13_selectVariants/mergedVcf/mergedVcf.vcf.gz"
+gdsPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/13_selectVariants/gds/mergedGds.gds"
 makeGds <-!file.exists(gdsPath)
 if (makeGds) {
   dir.create(dirname(gdsPath), recursive = TRUE)
@@ -92,11 +92,11 @@ snvs <- tibble(
 head(snvs)
 ```
 
-Now we can use this data to write the `.intervals` list in the GATK-style format.
+We can now use this data to write the `.intervals` list in GATK-style format.
 This is also relatively large so will be written to the HPC.
 
 ```{r intervals}
-intervalPath <- "/hpcfs/users/a1647910/210305_fmr1_snv/13_countAlleles/intervals/snvs.intervals"
+intervalPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/14_countAlleles/intervals/snvs.intervals"
 makeIntervals <- !file.exists(intervalPath)
 if (makeIntervals) {
   dir.create(dirname(intervalPath), recursive = TRUE)
