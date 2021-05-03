@@ -31,3 +31,5 @@ bash/\.*
 *.vcf
 *recal
 slurm/*
+*.intervals
+*alleleCounts.tsv

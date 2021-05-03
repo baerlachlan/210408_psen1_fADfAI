@@ -16,12 +16,12 @@
 
 ## Lists for expanding
 SAMPLES = [
-"1_KB_A10", "2_KB_A11", "3_KB_A1", "4_KB_A6",
-"5_KB_A7", "6_KB_B11", "7_KB_B12", "8_KB_B3",
-"9_KB_B5", "10_KB_B6", "11_KB_B7", "12_KB_B8",
-"13_KB_B9", "14_KB_C10", "15_KB_C11", "16_KB_C12",
-"17_KB_C1", "18_KB_C2", "19_KB_C3", "20_KB_C4",
-"21_KB_C5", "22_KB_C6", "23_KB_C7", "24_KB_C8"
+	"1_KB_A10", "2_KB_A11", "3_KB_A1", "4_KB_A6",
+	"5_KB_A7", "6_KB_B11", "7_KB_B12", "8_KB_B3",
+	"9_KB_B5", "10_KB_B6", "11_KB_B7", "12_KB_B8",
+	"13_KB_B9", "14_KB_C10", "15_KB_C11", "16_KB_C12",
+	"17_KB_C1", "18_KB_C2", "19_KB_C3", "20_KB_C4",
+	"21_KB_C5", "22_KB_C6", "23_KB_C7", "24_KB_C8"
 ]
 PAIR_ID = ["R1", "R2"]
 REF_EXT = ["dict", "fa.fai"]
@@ -40,7 +40,7 @@ rule all:
 		"03_alignedData/featureCounts/genes.out",
 		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
 		expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT),
-#		expand("14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv", SAMPLE = SAMPLES)
+		expand("14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv", SAMPLE = SAMPLES)
 
 ###########################
 ## Build reference files ##
@@ -595,12 +595,12 @@ rule callVariants:
 	shell:
 		"""
 		gatk --java-options "-Xms6000m -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10" \
-		HaplotypeCaller \
-		-R {input.refFa} \
-		-I {input.bam} \
-		-O {output.vcf} \
-		-dont-use-soft-clipped-bases \
-		--standard-min-confidence-threshold-for-calling 20
+			HaplotypeCaller \
+			-R {input.refFa} \
+			-I {input.bam} \
+			-O {output.vcf} \
+			-dont-use-soft-clipped-bases \
+			--standard-min-confidence-threshold-for-calling 20
 		"""
 
 rule filterVariants:
@@ -695,12 +695,12 @@ rule countAlleles:
 	resources:
 		cpu = 1,
 		ntasks = 1,
-		mem_mb = 4000,
-		hours = 1,
+		mem_mb = 8000,
+		hours = 2,
 		mins = 0
 	shell:
 		"""
-		gatk \
+		gatk --java-options "-Xms6000m -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10" \
 			CollectAllelicCounts \
 			-I {input.bam} \
 			-R {input.refFa} \
