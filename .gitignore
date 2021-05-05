@@ -33,3 +33,4 @@ bash/\.*
 slurm/*
 *.intervals
 *alleleCounts.tsv
+15_aseReadCounts/*

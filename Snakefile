@@ -40,7 +40,8 @@ rule all:
 		"03_alignedData/featureCounts/genes.out",
 		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
 		expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT),
-		expand("14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv", SAMPLE = SAMPLES)
+		expand("14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv", SAMPLE = SAMPLES),
+		expand("15_aseReadCounts/{SAMPLE}.tsv", SAMPLE = SAMPLES)
 
 ###########################
 ## Build reference files ##
@@ -268,14 +269,14 @@ rule align:
 	shell:
 		"""
 		STAR \
-		--genomeDir {input.starIndex}\
-		--runThreadN {resources.cpu} \
-		--readFilesIn {input.R1} {input.R2} \
-		--readFilesCommand "gunzip -c" \
-		--sjdbOverhang {params.overhang} \
-		--outSAMtype BAM SortedByCoordinate \
-		--twopassMode Basic \
-		--outFileNamePrefix {params.bname}
+			--genomeDir {input.starIndex}\
+			--runThreadN {resources.cpu} \
+			--readFilesIn {input.R1} {input.R2} \
+			--readFilesCommand "gunzip -c" \
+			--sjdbOverhang {params.overhang} \
+			--outSAMtype BAM SortedByCoordinate \
+			--twopassMode Basic \
+			--outFileNamePrefix {params.bname}
 
 
 		mkdir -p 03_alignedData/log
@@ -310,7 +311,7 @@ rule featureCounts:
 		gtf = REFDIR + "Danio_rerio.GRCz11.101.chr.gtf.gz"
 	output:
 		counts = "03_alignedData/featureCounts/counts.out",
-		sumary = "03_alignedData/featureCounts/counts.out.summary",
+		summary = "03_alignedData/featureCounts/counts.out.summary",
 		genes = "03_alignedData/featureCounts/genes.out"
 	conda:
 		"snakemake/envs/default.yaml"
@@ -322,12 +323,13 @@ rule featureCounts:
 		mins = 0
 	shell:
 		"""
-		featureCounts -Q 10 \
-		  -s 0 \
-		  -T 4 \
-		  -p \
-		  -a {input.gtf} \
-		  -o {output.counts} {input.bam}
+		featureCounts \
+			-Q 10 \
+			-s 0 \
+			-T 4 \
+			-p \
+			-a {input.gtf} \
+			-o {output.counts} {input.bam}
 
 		## Storing the output in a single file
 		cut -f1,7- {output.counts} | \
@@ -713,4 +715,30 @@ rule countAlleles:
 
 		## Remove header
 		sed -i '/^@/d' {output.counts}
+		"""
+
+rule aseReadCounts:
+	input:
+		bam = "10_applyRecal/bam/{SAMPLE}.bam",
+		bamIndex = "10_applyRecal/bam/{SAMPLE}.bai",
+		vcf = "13_selectVariants/vcf/{SAMPLE}.vcf.gz",
+		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa"
+	output:
+		tsv = "15_aseReadCounts/{SAMPLE}.tsv"
+	conda:
+		"snakemake/envs/default.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 4000,
+		hours = 4,
+		mins = 0
+	shell:
+		"""
+		gatk \
+			ASEReadCounter \
+			-I {input.bam} \
+			-V {input.vcf} \
+			-R {input.refFa} \
+			-O {output.tsv}
 		"""
