@@ -35,12 +35,17 @@ library(parallel)
 library(here)
 library(AnnotationHub)
 library(purrr)
+library(scales)
 ```
 
 ```{r options}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
 cores <- detectCores() - 1
+```
+
+```{r}
+source("~/bioinformatics/lbBioUtils/lbFuncs.R")
 ```
 
 ## Annotation
@@ -81,6 +86,9 @@ files <- list.files(
 )
 samples <- basename(files) %>%
   str_remove(".tsv")
+```
+
+```{r}
 aseCounts_raw <- lapply(files, function(file){
   sample <- basename(file) %>%
     str_remove(".tsv")
@@ -98,6 +106,31 @@ aseCounts_raw <- lapply(files, function(file){
 aseCounts <- lapply(aseCounts_raw, function(x){
   x %>%
     mutate(allele = paste0(refAllele, ",", altAllele)) %>%
+    dplyr::select(
+      chromosome = contig, position, allele, refCount, altCount, totalCount, sample
+    )
+})
+```
+
+```{r}
+aseRatios <- lapply(aseCounts_raw, function(x){
+  x %>%
+    dplyr::filter(totalCount != 0) %>%
+    mutate(
+      allele = paste0(refAllele, ",", altAllele),
+      refRatio = refCount / totalCount,
+      altRatio = altCount / totalCount
+    ) %>%
+    dplyr::select(
+      chromosome = contig, position, allele, refRatio, altRatio, totalCount, sample
+    )
+})
+```
+
+```{r}
+perBaseCounts <- lapply(aseCounts_raw, function(x){
+  x %>%
+    mutate(allele = paste0(refAllele, ",", altAllele)) %>%
     pivot_longer(
       cols = c("refAllele", "altAllele"),
       names_to = "variant",
@@ -113,85 +146,116 @@ aseCounts <- lapply(aseCounts_raw, function(x){
     ) %>%
     left_join(metadata[,c("sample", "genotype")])
 })
-aseProps <- lapply(aseCounts, function(x){
+perBaseProps <- lapply(perBaseCounts, function(x){
   x %>%
     mutate(across(c(A, C, G, T), ~ ./totalCount))
 })
-```
-
-# Data exploration
-
-## Coverage
-
-```{r}
-aseCounts %>%
-  purrr::reduce(rbind) %>%
-  ggplot(aes(totalCount, colour = sample)) +
-  stat_ecdf(geom = "step") +
-  coord_cartesian(xlim = c(0, 400))
-```
-
-```{r}
-lapply(aseCounts, function(x){
-  x %>%
-    mutate(
-      bin = ifelse(totalCount >= 0, 0, NA),
-      bin = ifelse(totalCount >= 10, 10, bin),
-      bin = ifelse(totalCount >= 20, 20, bin),
-      bin = ifelse(totalCount >= 30, 30, bin),
-      bin = ifelse(totalCount >= 60, 60, bin)
-    ) %>%
-    group_by(bin) %>%
-    summarise(n = n(), sample = unique(sample))
-})
-  
 ```
 
 # Quality control
 
 ## ASEReadCounter
 
-GATK tool `ASEReadCounter` calculates allele conts at a set of positions
+GATK tool `ASEReadCounter` calculates allele counts at a set of positions
 after applying filters specifically tuned for AE analysis of RNA-seq data.
-The filters operate on mapping quality, base quality, depth of coverage, 
-overlapping paired reads and deletions overlapping the position.
-They are controlled by the command-line arguments:
+The filters operate on mapping quality, base quality, depth of coverage and
+overlapping paired reads.
+Each of these filters can be controlled by command-line arguments.
+The data in this analysis was generated with the following options:
 
-* `--min-mapping-quality`
-* `--min-base-quality`
-* `--min-depth-of-non-filtered-base`
-* `--count-overlap-reads-handling`
+* `--min-mapping-quality 10`
+* `--min-base-quality 20`
+* `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
+  + Ths option counts all fragments where the base is consistent when mate pairs
+  overlap.
+* `--min-depth-of-non-filtered-base -1`
+  + This argument is disabled, because depth filtering will be performed
+  manually (see next section).
 
-These filters address a number of the quality control measures suggested in
+```{r}
+filtProps <- aseCounts_raw %>%
+  purrr::reduce(rbind) %>%
+  group_by(sample) %>%
+  summarise(
+    mapQ = sum(lowMAPQDepth) / sum(rawDepth),
+    baseQ = sum(lowBaseQDepth) / sum(rawDepth),
+    otherBases = sum(otherBases) / sum(rawDepth)
+    )
+```
+
+With the above settings across all samples, reads filtered due to insufficient 
+mapping quality ranged between `r percent(min(filtProps$mapQ), accuracy = 0.01)` 
+and `r percent(max(filtProps$mapQ), accuracy = 0.01)`, reads filtered due to
+base quality ranged between `r percent(min(filtProps$baseQ), accuracy = 0.01)` 
+and `r percent(max(filtProps$baseQ), accuracy = 0.01)`, and reads filtered due
+to overlapping mate pairs with inconsistent bases ranged between 
+`r percent(min(filtProps$otherBases), accuracy = 0.01)` and 
+`r percent(max(filtProps$otherBases), accuracy = 0.01)`.
+
+More information about recommended quality control measures can be found in
 [Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
+
+## Coverage
+
+Heterozygous SNP sites should also be filtered based on coverage, as low counts
+will be uninformative ...
+
+```{r}
+aseCounts %>%
+  purrr::reduce(rbind) %>%
+  ggplot(aes(totalCount, colour = sample)) +
+  stat_ecdf(geom = "step") +
+  coord_cartesian(xlim = c(0, 400)) +
+  labs(x = "Reads / heat-SNP", y = "Cumulative distribution") +
+  theme(legend.position = "none") 
+```
+
+```{r}
+lapply(aseCounts, function(x){
+  n0 <- x %>%
+    dplyr::filter(totalCount > 0) %>%
+    nrow()
+  n10 <- x %>%
+    dplyr::filter(totalCount > 10) %>%
+    nrow()
+  n20 <- x %>%
+    dplyr::filter(totalCount > 20) %>%
+    nrow()
+  n30 <- x %>%
+    dplyr::filter(totalCount > 30) %>%
+    nrow()
+  n60 <- x %>%
+    dplyr::filter(totalCount > 60) %>%
+    nrow()
+  sample <- unique(x$sample)
+  tibble(
+    bin = c(">0", ">10", ">20", ">30", ">60"),
+    n = c(n0, n10, n20, n30, n60),
+    sample = sample
+  )
+}) %>%
+  purrr::reduce(rbind) %>%
+  ggplot(aes(bin, n, fill = bin)) +
+  geom_boxplot() +
+  labs(x = "Reads / het-SNP", y = "het-SNPs per sample") +
+  theme(legend.position = "none")
+```
 
 ## Reference mapping bias
 
-An important aspect of AE analysis is the potential effects of mapping bias.
+An important aspect to consider in AE analysis is the potential for mapping bias.
 For RNA-seq data mapped to a reference genome, reads that carry an alternate 
-allele at positions of variation have at least one mismatch, and therefore have 
-a lower probability of aligning correctly that reads containing the reference 
+allele at positions of variation have at least one mismatch, and therefore a 
+lower probability of aligning correctly than reads containing the reference 
 allele.
 To estimate this effect we can calculate the genome-wide reference ratio,
 which will indicate a reference mapping bias if above 0.5.
-This calculated ratio may be a more suitable null in downstream statistical 
-testing, improving results.
+This calculated ratio may be more suitable as the null in downstream statistical 
+testing.
 
 ```{r}
-refaltRatios <- lapply(aseCounts_raw, function(x){
-  x %>%
-    dplyr::filter(totalCount != 0) %>%
-    mutate(
-      allele = paste0(refAllele, ",", altAllele),
-      refRatio = refCount / totalCount,
-      altRatio = altCount / totalCount
-    ) %>%
-    dplyr::select(
-      chromosome = contig, position, allele, refRatio, altRatio, totalCount, sample
-    )
-}) %>%
-  purrr::reduce(rbind) 
-refaltRatios %>%
+aseRatios %>%
+  purrr::reduce(rbind) %>%
   left_join(metadata[,c("sample", "genotype")]) %>%
   dplyr::arrange(genotype, sample) %>%
   mutate(sample = factor(sample, levels = unique(sample))) %>%
@@ -204,19 +268,17 @@ refaltRatios %>%
 ```
 
 ```{r}
-refRatMean <- refaltRatios %>%
+refBias <- aseRatios %>%
+  purrr::reduce(rbind) %>%
   group_by(sample) %>%
-  summarise(mean = mean(refRatio))
-refRatMedian <- refaltRatios %>%
-  group_by(sample) %>%
-  summarise(median = median(refRatio))
+  summarise(mean = mean(refRatio), median = median(refRatio))
 ```
 
 A reference mapping bias is evident across all samples.
-Mean reference ratios ranged between `r round(min(refRatMean$mean), 3)` and 
-`r round(max(refRatMean$mean), 3)`.
-Median reference ratios ranged between `r round(min(refRatMedian$median), 3)`
-and `r round(max(refRatMedian$median), 3)`.
+Mean reference ratios ranged between `r round(min(refBias$mean), 3)` and 
+`r round(max(refBias$mean), 3)`.
+Median reference ratios ranged between `r round(min(refBias$median), 3)`
+and `r round(max(refBias$median), 3)`.
 
 # Gene variants
 
