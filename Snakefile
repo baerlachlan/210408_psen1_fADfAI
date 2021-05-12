@@ -217,8 +217,8 @@ rule trim:
         	-o {output.R1} \
         	-O {output.R2} \
 			--qualified_quality_phred 20 \
-			--length_required 35 \
 			--unqualified_percent_limit 100 \
+			--length_required 35 \
 			--complexity_threshold 100 \
 			--cut_front \
 			--cut_tail \
@@ -740,5 +740,7 @@ rule aseReadCounts:
 			-I {input.bam} \
 			-V {input.vcf} \
 			-R {input.refFa} \
-			-O {output.tsv}
+			-O {output.tsv} \
+			--min-mapping-quality 10 \
+			--min-base-quality 20
 		"""
