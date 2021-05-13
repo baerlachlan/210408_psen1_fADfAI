@@ -1,5 +1,5 @@
 ---
-title: "eQTL exploration"
+title: "Allele Specific Expression Analysis"
 author: "Lachlan Baer"
 date: "`r format(Sys.time(), '%d %B, %Y')`"
 output:
@@ -48,7 +48,7 @@ cores <- detectCores() - 1
 source("~/bioinformatics/lbBioUtils/lbFuncs.R")
 ```
 
-## Annotation
+## EnsDb
 
 ```{r}
 ah <- AnnotationHub() %>%
@@ -62,11 +62,6 @@ mcols(genes) <- mcols(genes)[
 exons <- exonsBy(ensDb, by = "gene")
 ```
 
-```{r}
-drChrs <- seq(1:25)
-nucCols <- tibble(A = NA, C = NA, G = NA, T = NA)
-```
-
 # Load data
 
 ## Metadata
@@ -75,9 +70,15 @@ nucCols <- tibble(A = NA, C = NA, G = NA, T = NA)
 metadata <- read_csv(here("files/samples.csv")) %>%
   dplyr::select(-sample) %>%
   dplyr::rename(sample = basename, genotype = Genotype)
+print.inf(metadata)
 ```
 
 ## Counts
+
+Heterozygous SNPs detected by `ASEReadCounter` were recorded in a seperate `tsv`
+file for each sample. 
+These were loaded into R as a list of tibbles containing the unprocessed raw 
+data for ASE analysis.
 
 ```{r}
 files <- list.files(
@@ -86,71 +87,95 @@ files <- list.files(
 )
 samples <- basename(files) %>%
   str_remove(".tsv")
+drChrs <- seq(1:25)
 ```
 
 ```{r}
-aseCounts_raw <- lapply(files, function(file){
+aseCounts <- lapply(files, function(file){
   sample <- basename(file) %>%
     str_remove(".tsv")
   read_tsv(
     file,
     col_types = "cdcccdddddddd"
   ) %>%
-    mutate(sample = sample) %>%
-    dplyr::filter(contig %in% as.character(drChrs))
+    dplyr::filter(contig %in% as.character(drChrs)) %>%
+    mutate(
+      sample = sample,
+      allele = paste0(refAllele, ",", altAllele)
+    ) %>%
+    left_join(metadata[,c("sample", "genotype")]) %>%
+    dplyr::select(
+      chromosome = contig, position, allele, refCount, altCount, totalCount, 
+      sample, genotype, lowMAPQDepth, lowBaseQDepth, rawDepth, otherBases, 
+      improperPairs
+    )
 }) %>% 
   set_names(samples)
 ```
 
+The number of genome-wide het-SNP positions as reported by `ASEReadCounter` 
+ranged from `r comma(min(sapply(aseCounts, nrow)))` to
+`r comma(max(sapply(aseCounts, nrow)))` across all samples.
+
+```{r include=FALSE, eval=FALSE}
+# nucCols <- tibble(A = NA, C = NA, G = NA, T = NA) # In case a base is not detected
+# perBaseCounts <- lapply(aseCounts, function(x){
+#   x %>%
+#     mutate(allele = paste0(refAllele, ",", altAllele)) %>%
+#     pivot_longer(
+#       cols = c("refAllele", "altAllele"),
+#       names_to = "variant",
+#       values_to = "base"
+#     ) %>% 
+#     mutate(value = ifelse(variant == "refAllele", refCount, altCount)) %>%
+#     dplyr::select(-variant) %>%
+#     pivot_wider(names_from = base, values_from = value) %>%
+#     add_column(!!!nucCols[!names(nucCols) %in% names(.)]) %>% # Adds column of NA's if no detected base
+#     dplyr::select(
+#       chromosome = contig, position, allele, A, C, G, T, totalCount, 
+#       rawDepth, sample
+#     ) %>%
+#     left_join(metadata[,c("sample", "genotype")])
+# })
+# perBaseProps <- lapply(perBaseCounts, function(x){
+#   x %>%
+#     mutate(across(c(A, C, G, T), ~ ./totalCount))
+# })
+```
+
+## Exons
+
+Since the variants originate from RNA-seq data, they were filtered based on 
+genomic position for those that lie in only exonic regions (Ensembl version 101).
+Gene identifiers were also annotated for each position to enable downstream 
+analysis of ASE across genes.
+
 ```{r}
-aseCounts <- lapply(aseCounts_raw, function(x){
-  x %>%
-    mutate(allele = paste0(refAllele, ",", altAllele)) %>%
-    dplyr::select(
-      chromosome = contig, position, allele, refCount, altCount, totalCount, sample
-    )
+exonOverlaps <- lapply(aseCounts, function(x){
+  indices <- x %>%
+    dplyr::select(seqnames = chromosome, start = position) %>%
+    mutate(end = start) %>%
+    makeGRangesFromDataFrame() %>%
+    findOverlaps(exons)
+  tibble(
+    snpInd = as.data.frame(indices)$queryHits,
+    geneInd = as.data.frame(indices)$subjectHits
+  )
 })
 ```
 
 ```{r}
-aseRatios <- lapply(aseCounts_raw, function(x){
-  x %>%
-    dplyr::filter(totalCount != 0) %>%
-    mutate(
-      allele = paste0(refAllele, ",", altAllele),
-      refRatio = refCount / totalCount,
-      altRatio = altCount / totalCount
-    ) %>%
-    dplyr::select(
-      chromosome = contig, position, allele, refRatio, altRatio, totalCount, sample
-    )
-})
+exonCounts <- lapply(seq_along(aseCounts), function(x){
+  aseCounts[[x]][exonOverlaps[[x]]$snpInd,] %>%
+    cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %>%
+    as_tibble()
+}) %>%
+  set_names(samples)
 ```
 
-```{r}
-perBaseCounts <- lapply(aseCounts_raw, function(x){
-  x %>%
-    mutate(allele = paste0(refAllele, ",", altAllele)) %>%
-    pivot_longer(
-      cols = c("refAllele", "altAllele"),
-      names_to = "variant",
-      values_to = "base"
-    ) %>% 
-    mutate(value = ifelse(variant == "refAllele", refCount, altCount)) %>%
-    dplyr::select(-variant) %>%
-    pivot_wider(names_from = base, values_from = value) %>%
-    add_column(!!!nucCols[!names(nucCols) %in% names(.)]) %>%
-    dplyr::select(
-      chromosome = contig, position, allele, A, C, G, T, totalCount, 
-      rawDepth, sample
-    ) %>%
-    left_join(metadata[,c("sample", "genotype")])
-})
-perBaseProps <- lapply(perBaseCounts, function(x){
-  x %>%
-    mutate(across(c(A, C, G, T), ~ ./totalCount))
-})
-```
+After filtering for SNPs in exonic regions, the remaining number of het-SNPs 
+ranged from `r comma(min(sapply(exonCounts, nrow)))` to
+`r comma(max(sapply(exonCounts, nrow)))` across all samples.
 
 # Quality control
 
@@ -167,20 +192,20 @@ The data in this analysis was generated with the following options:
 * `--min-base-quality 20`
 * `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
   + Ths option counts all fragments where the base is consistent when mate pairs
-  overlap.
+overlap.
 * `--min-depth-of-non-filtered-base -1`
   + This argument is disabled, because depth filtering will be performed
-  manually (see next section).
+manually (see next section).
 
 ```{r}
-filtProps <- aseCounts_raw %>%
+filtProps <- aseCounts %>%
   purrr::reduce(rbind) %>%
   group_by(sample) %>%
   summarise(
     mapQ = sum(lowMAPQDepth) / sum(rawDepth),
     baseQ = sum(lowBaseQDepth) / sum(rawDepth),
     otherBases = sum(otherBases) / sum(rawDepth)
-    )
+  )
 ```
 
 With the above settings across all samples, reads filtered due to insufficient 
@@ -197,11 +222,12 @@ More information about recommended quality control measures can be found in
 
 ## Coverage
 
-Heterozygous SNP sites should also be filtered based on coverage, as low counts
-will be uninformative ...
+Het-SNPs sites were also filtered based on coverage, as low total counts
+will be unsuitable for determining ASE.
+Firstly, a quick inspection of coverage distribution.
 
 ```{r}
-aseCounts %>%
+exonCounts %>%
   purrr::reduce(rbind) %>%
   ggplot(aes(totalCount, colour = sample)) +
   stat_ecdf(geom = "step") +
@@ -211,25 +237,25 @@ aseCounts %>%
 ```
 
 ```{r}
-lapply(aseCounts, function(x){
+lapply(exonCounts, function(x){
   n0 <- x %>%
-    dplyr::filter(totalCount > 0) %>%
+    dplyr::filter(totalCount >= 0) %>%
     nrow()
   n10 <- x %>%
-    dplyr::filter(totalCount > 10) %>%
+    dplyr::filter(totalCount >= 10) %>%
     nrow()
   n20 <- x %>%
-    dplyr::filter(totalCount > 20) %>%
+    dplyr::filter(totalCount >= 20) %>%
     nrow()
   n30 <- x %>%
-    dplyr::filter(totalCount > 30) %>%
+    dplyr::filter(totalCount >= 30) %>%
     nrow()
   n60 <- x %>%
-    dplyr::filter(totalCount > 60) %>%
+    dplyr::filter(totalCount >= 60) %>%
     nrow()
   sample <- unique(x$sample)
   tibble(
-    bin = c(">0", ">10", ">20", ">30", ">60"),
+    bin = c("\u2265 0", "\u2265 10", "\u2265 20", "\u2265 30", "\u2265 60"),
     n = c(n0, n10, n20, n30, n60),
     sample = sample
   )
@@ -240,6 +266,16 @@ lapply(aseCounts, function(x){
   labs(x = "Reads / het-SNP", y = "het-SNPs per sample") +
   theme(legend.position = "none")
 ```
+
+```{r}
+exonCounts <- lapply(exonCounts, function(x){
+  dplyr::filter(x, totalCount >= 10)
+})
+```
+
+With a cut-off of at least 10 counts per het-SNP position, 
+`r comma(min(sapply(exonCounts, nrow)))` to
+`r comma(max(sapply(exonCounts, nrow)))` het-SNPs remained across all samples.
 
 ## Reference mapping bias
 
@@ -254,6 +290,21 @@ This calculated ratio may be more suitable as the null in downstream statistical
 testing.
 
 ```{r}
+aseRatios <- lapply(exonCounts, function(x){
+  x %>%
+    dplyr::filter(totalCount != 0) %>%
+    mutate(
+      refRatio = refCount / totalCount,
+      altRatio = altCount / totalCount
+    ) %>%
+    dplyr::select(
+      chromosome, position, allele, refRatio, altRatio, totalCount,
+      sample
+    )
+})
+```
+
+```{r}
 aseRatios %>%
   purrr::reduce(rbind) %>%
   left_join(metadata[,c("sample", "genotype")]) %>%
@@ -262,8 +313,10 @@ aseRatios %>%
   ggplot(aes(sample, refRatio, fill = genotype)) +
   geom_boxplot() +
   stat_summary(fun = mean, geom = "point", shape = 18, size = 2) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", colour = "black") +
   labs(x = "Sample", y = "Reference allele ratio") +
   scale_fill_discrete(name = "Genotype") +
+  scale_y_continuous(breaks = seq(0, 1, 0.2)) +
   theme(axis.text.x = element_text(angle = -90, vjust = 0.5))
 ```
 
@@ -280,42 +333,11 @@ Mean reference ratios ranged between `r round(min(refBias$mean), 3)` and
 Median reference ratios ranged between `r round(min(refBias$median), 3)`
 and `r round(max(refBias$median), 3)`.
 
-# Gene variants
+# GeneiASE
+
+## Static ASE
 
 ```{r}
-geneSym <- "psen1"
-```
 
-```{r}
-geneHets <- lapply(aseCounts, function(x){
-  geneId <- genes %>%
-    subset(seqnames %in% drChrs) %>%
-    subset(gene_name == geneSym) %>%
-    .$gene_id
-  eoi <- exons[[geneId]]
-  chr <- seqnames(eoi) %>%
-    unique() %>%
-    as.character() %>%
-    as.numeric()
-  ranges <- ranges(eoi) %>% 
-    as.data.frame() %>% 
-    pmap(function(start, end, ...){seq(start, end)}) %>%
-    unlist() %>%
-    unique()
-  x %>% 
-    dplyr::filter(
-      chromosome == chr,
-      position %in% ranges
-    )
-})
-```
-
-```{r}
-hetsPerSample <- lapply(seq_along(geneHets), function(x){
-  tibble(sample = names(geneHets)[x], het_positions = nrow(geneHets[[x]]))
-}) %>%
-  purrr::reduce(rbind) %>%
-  left_join(metadata) %>%
-  dplyr::arrange(genotype, sample)
 ```
 
