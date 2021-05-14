@@ -143,40 +143,6 @@ ranged from `r comma(min(sapply(aseCounts, nrow)))` to
 # })
 ```
 
-## Exons
-
-Since the variants originate from RNA-seq data, they were filtered based on 
-genomic position for those that lie in only exonic regions (Ensembl version 101).
-Gene identifiers were also annotated for each position to enable downstream 
-analysis of ASE across genes.
-
-```{r}
-exonOverlaps <- lapply(aseCounts, function(x){
-  indices <- x %>%
-    dplyr::select(seqnames = chromosome, start = position) %>%
-    mutate(end = start) %>%
-    makeGRangesFromDataFrame() %>%
-    findOverlaps(exons)
-  tibble(
-    snpInd = as.data.frame(indices)$queryHits,
-    geneInd = as.data.frame(indices)$subjectHits
-  )
-})
-```
-
-```{r}
-exonCounts <- lapply(seq_along(aseCounts), function(x){
-  aseCounts[[x]][exonOverlaps[[x]]$snpInd,] %>%
-    cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %>%
-    as_tibble()
-}) %>%
-  set_names(samples)
-```
-
-After filtering for SNPs in exonic regions, the remaining number of het-SNPs 
-ranged from `r comma(min(sapply(exonCounts, nrow)))` to
-`r comma(max(sapply(exonCounts, nrow)))` across all samples.
-
 # Quality control
 
 ## ASEReadCounter
@@ -191,10 +157,10 @@ The data in this analysis was generated with the following options:
 * `--min-mapping-quality 10`
 * `--min-base-quality 20`
 * `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
-  + Ths option counts all fragments where the base is consistent when mate pairs
++ Ths option counts all fragments where the base is consistent when mate pairs
 overlap.
 * `--min-depth-of-non-filtered-base -1`
-  + This argument is disabled, because depth filtering will be performed
++ This argument is disabled, because depth filtering will be performed
 manually (see next section).
 
 ```{r}
@@ -221,6 +187,39 @@ More information about recommended quality control measures can be found in
 [Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
 
 ## Coverage
+
+Since the variants originate from RNA-seq data, they were filtered based on 
+genomic position for those that lie in only exonic regions (Ensembl version 101).
+Gene identifiers were also annotated for each position to enable downstream 
+analysis of ASE across genes.
+
+```{r}
+exonOverlaps <- lapply(aseCounts, function(x){
+  indices <- x %>%
+    dplyr::select(seqnames = chromosome, start = position) %>%
+    mutate(end = start) %>%
+    makeGRangesFromDataFrame() %>%
+    findOverlaps(exons)
+  tibble(
+    snpInd = as.data.frame(indices)$queryHits,
+    geneInd = as.data.frame(indices)$subjectHits
+  )
+})
+```
+
+```{r}
+exonCounts <- lapply(seq_along(aseCounts), function(x){
+  aseCounts[[x]][exonOverlaps[[x]]$snpInd,] %>%
+    cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %>%
+    as_tibble() %>%
+    rownames_to_column("snpID")
+}) %>%
+  set_names(samples)
+```
+
+After filtering for SNPs in exonic regions, the remaining number of het-SNPs 
+ranged from `r comma(min(sapply(exonCounts, nrow)))` to
+`r comma(max(sapply(exonCounts, nrow)))` across all samples.
 
 Het-SNPs sites were also filtered based on coverage, as low total counts
 will be unsuitable for determining ASE.
@@ -325,6 +324,10 @@ refBias <- aseRatios %>%
   purrr::reduce(rbind) %>%
   group_by(sample) %>%
   summarise(mean = mean(refRatio), median = median(refRatio))
+altBias <- aseRatios %>%
+  purrr::reduce(rbind) %>%
+  group_by(sample) %>%
+  summarise(mean = mean(altRatio), median = median(altRatio))
 ```
 
 A reference mapping bias is evident across all samples.
@@ -333,11 +336,33 @@ Mean reference ratios ranged between `r round(min(refBias$mean), 3)` and
 Median reference ratios ranged between `r round(min(refBias$median), 3)`
 and `r round(max(refBias$median), 3)`.
 
-# GeneiASE
+# Static ASE
 
-## Static ASE
+Static ASE is ...
+
+## GeneiASE export
 
 ```{r}
-
+staticCounts <- lapply(exonCounts, function(x){
+  x %>%
+    left_join(altBias[,c("sample", "mean")]) %>%
+    dplyr::select(
+      gene, snpID, altCount, refCount, betabinom.p = mean
+    )
+})
+lapply(seq_along(staticCounts), function(x){
+  path <- paste0(
+    "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/16_geneiASE/input/",
+    names(staticCounts[x]),
+    ".static.tsv"
+  )
+  if (!file.exists(path)) {
+    if (!dir.exists(dirname(path))) {
+      dir.create(dirname(path), recursive = TRUE)
+    }
+    write_tsv(staticCounts[[x]], path)
+  }
+})
 ```
 
+## GeneiASE import
