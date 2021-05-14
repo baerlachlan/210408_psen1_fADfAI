@@ -41,7 +41,8 @@ rule all:
 		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
 		expand("13_selectVariants/mergedVcf/mergedVcf.{EXT}", EXT = VCF_EXT),
 		expand("14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv", SAMPLE = SAMPLES),
-		expand("15_aseReadCounts/{SAMPLE}.tsv", SAMPLE = SAMPLES)
+		expand("15_aseReadCounts/{SAMPLE}.tsv", SAMPLE = SAMPLES),
+		expand("16_geneiASE/output/{SAMPLE}.static.pval.tsv", SAMPLE = SAMPLES)
 
 ###########################
 ## Build reference files ##
@@ -743,4 +744,25 @@ rule aseReadCounts:
 			-O {output.tsv} \
 			--min-mapping-quality 10 \
 			--min-base-quality 20
+		"""
+
+rule geneiase:
+	input:
+		"16_geneiASE/input/{SAMPLE}.static.tsv"
+	output:
+		"16_geneiASE/output/{SAMPLE}.static.pval.tsv"
+	conda:
+		"snakemake/envs/geneiase.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 2,
+		mem_mb = 8000,
+		hours = 24,
+		mins = 0
+	shell:
+		"""
+		../packages/geneiase-1.0.1/bin/geneiase \
+			-t static \
+			-i {input} \
+			-o {output}
 		"""
