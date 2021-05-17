@@ -755,8 +755,8 @@ rule geneiase:
 		"snakemake/envs/geneiase.yaml"
 	resources:
 		cpu = 1,
-		ntasks = 2,
-		mem_mb = 8000,
+		ntasks = 1,
+		mem_mb = 4000,
 		hours = 24,
 		mins = 0
 	shell:
