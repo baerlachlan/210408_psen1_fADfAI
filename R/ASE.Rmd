@@ -36,6 +36,7 @@ library(here)
 library(AnnotationHub)
 library(purrr)
 library(scales)
+library(kableExtra)
 ```
 
 ```{r options}
@@ -70,7 +71,13 @@ exons <- exonsBy(ensDb, by = "gene")
 metadata <- read_csv(here("files/samples.csv")) %>%
   dplyr::select(-sample) %>%
   dplyr::rename(sample = basename, genotype = Genotype)
-print.inf(metadata)
+metadata %>%
+  kable(
+    align = "lllllll"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
 ```
 
 ## Counts
@@ -186,7 +193,9 @@ to overlapping mate pairs with inconsistent bases ranged between
 More information about recommended quality control measures can be found in
 [Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
 
-## Coverage
+## Filtering
+
+### Exonic variants
 
 Since the variants originate from RNA-seq data, they were filtered based on 
 genomic position for those that lie in only exonic regions (Ensembl version 101).
@@ -208,7 +217,7 @@ exonOverlaps <- lapply(aseCounts, function(x){
 ```
 
 ```{r}
-exonCounts <- lapply(seq_along(aseCounts), function(x){
+counts <- lapply(seq_along(aseCounts), function(x){
   aseCounts[[x]][exonOverlaps[[x]]$snpInd,] %>%
     cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %>%
     as_tibble() %>%
@@ -218,25 +227,32 @@ exonCounts <- lapply(seq_along(aseCounts), function(x){
 ```
 
 After filtering for SNPs in exonic regions, the remaining number of het-SNPs 
-ranged from `r comma(min(sapply(exonCounts, nrow)))` to
-`r comma(max(sapply(exonCounts, nrow)))` across all samples.
+ranged from `r comma(min(sapply(counts, nrow)))` to
+`r comma(max(sapply(counts, nrow)))` across all samples.
 
-Het-SNPs sites were also filtered based on coverage, as low total counts
-will be unsuitable for determining ASE.
-Firstly, a quick inspection of coverage distribution.
+### Coverage 
 
-```{r}
-exonCounts %>%
+Another important QC step before ASE anyalysis involves filtering Het-SNP sites
+based on coverage, as sites with low total counts are uninformative.
+
+Firstly, a quick inspection of coverage distribution was performed:
+
+```{r, fig.cap="*Cumulative distribution of RNA-seq read coverage per het-SNP. Each line represents a separate sample.*"}
+counts %>%
   purrr::reduce(rbind) %>%
   ggplot(aes(totalCount, colour = sample)) +
   stat_ecdf(geom = "step") +
   coord_cartesian(xlim = c(0, 400)) +
-  labs(x = "Reads / heat-SNP", y = "Cumulative distribution") +
+  labs(
+    x = "Reads / het-SNP",
+    y = "Cumulative distribution",
+    caption = ""
+  ) +
   theme(legend.position = "none") 
 ```
 
-```{r}
-lapply(exonCounts, function(x){
+```{r, fig.cap="*The number of het-SNPs per sample that satisfy read coverage cut-offs*"}
+lapply(counts, function(x){
   n0 <- x %>%
     dplyr::filter(totalCount >= 0) %>%
     nrow()
@@ -267,14 +283,75 @@ lapply(exonCounts, function(x){
 ```
 
 ```{r}
-exonCounts <- lapply(exonCounts, function(x){
+counts <- lapply(counts, function(x){
   dplyr::filter(x, totalCount >= 10)
 })
 ```
 
-With a cut-off of at least 10 counts per het-SNP position, 
-`r comma(min(sapply(exonCounts, nrow)))` to
-`r comma(max(sapply(exonCounts, nrow)))` het-SNPs remained across all samples.
+A cut-off of at least 10 counts per het-SNP position was applied, leaving
+`r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))`
+het-SNPs across all samples.
+
+### Mono-allelic expression
+
+Producing evidence of mono-allelic expression from short read RNA-seq datasets
+without parental genotypes or imprinting information is a controversial issue.
+Therefore, het-SNP sites were filtered based on a depth criteria for each allele
+($\ge$ 3 counts or $>$ 1% of the total counts for that allele).
+
+```{r}
+counts <- lapply(counts, function(x){
+  dplyr::filter(
+    x,
+    refCount >= 3,
+    altCount >= 3,
+    refCount / totalCount > 0.01,
+    altCount / totalCount > 0.01
+  )
+})
+```
+
+After filtering for mono-allelic expression, 
+`r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))`
+het-SNPs remained across all samples.
+
+### Summary
+
+```{r}
+genesWithSnps <- lapply(counts, function(x){
+  sample <- unique(x$sample)
+  atLeast1 <- length(unique(x$gene))
+  atLeast2 <- x %>%
+    group_by(gene) %>%
+    summarise(n = n()) %>%
+    dplyr::filter(n >= 2) %>%
+    nrow()
+  snps <- nrow(x)
+  tibble(sample = sample, atLeast1 = atLeast1, atLeast2 = atLeast2, snps = snps)
+}) %>%
+  purrr::reduce(rbind) %>%
+  left_join(metadata[,c("sample", "genotype")]) %>%
+  dplyr::arrange(genotype, sample)
+```
+
+The total number of genes and het-SNPs remaining after QC measures is summarised
+below:
+
+```{r}
+genesWithSnps %>%
+  dplyr::select(
+    Sample = sample, Genotype = genotype, Genes = atLeast1, SNPs = snps
+  ) %>%
+  kable(
+    align = "lll",
+    caption = paste(
+      "Overall numbers of genes and SNPs detected in each sample after filtering."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
 
 ## Reference mapping bias
 
@@ -289,7 +366,7 @@ This calculated ratio may be more suitable as the null in downstream statistical
 testing.
 
 ```{r}
-aseRatios <- lapply(exonCounts, function(x){
+ratios <- lapply(counts, function(x){
   x %>%
     dplyr::filter(totalCount != 0) %>%
     mutate(
@@ -298,13 +375,40 @@ aseRatios <- lapply(exonCounts, function(x){
     ) %>%
     dplyr::select(
       chromosome, position, allele, refRatio, altRatio, totalCount,
-      sample
+      sample, genotype, gene
     )
 })
 ```
 
-```{r}
-aseRatios %>%
+```{r fig.cap="*Histogram of global reference allele ratios at each het-SNP faceted by sample. The distributions show a similar profile of reference mapping bias indicated by an inflation of reference allele ratios > 0.5. Allelic ratios above 0.51 are shown in blue and below 0.49 in red, while balanced expression (0.49-0.51) is coloured grey.*"}
+ratioDists <- purrr::reduce(ratios, rbind) %>%
+  mutate(
+    fill = ifelse(refRatio < 0.49, "less", NA),
+    fill = ifelse(between(refRatio, 0.49, 0.51), "even", fill),
+    fill = ifelse(refRatio > 0.51, "more", fill),
+  )
+ggplot(ratioDists, aes(refRatio)) +
+  geom_histogram(
+    data = subset(ratioDists, fill == "less"),
+    bins = 100, fill = "red"
+  ) +
+  geom_histogram(
+    data = subset(ratioDists, fill == "even"),
+    bins = 100, fill = "grey"
+  ) +
+  geom_histogram(
+    data = subset(ratioDists, fill == "more"),
+    bins = 100, fill = "blue"
+  ) +
+  labs(x = "Reference allele ratio", y = "Count") +
+  facet_wrap(~ sample, ncol = 4)
+```
+
+The mean reference mapping ratios were calculated for each sample.
+This value will be used as the null statistic for detecting ASE.
+
+```{r, fig.cap="*Boxplots showing mapping bias for each sample. The mean reference ratio is indicated with a black diamond.*"}
+ratios %>%
   purrr::reduce(rbind) %>%
   left_join(metadata[,c("sample", "genotype")]) %>%
   dplyr::arrange(genotype, sample) %>%
@@ -316,15 +420,18 @@ aseRatios %>%
   labs(x = "Sample", y = "Reference allele ratio") +
   scale_fill_discrete(name = "Genotype") +
   scale_y_continuous(breaks = seq(0, 1, 0.2)) +
-  theme(axis.text.x = element_text(angle = -90, vjust = 0.5))
+  theme(
+    axis.text.x = element_text(angle = -90, vjust = 0.5),
+    legend.position = "bottom"
+  )
 ```
 
 ```{r}
-refBias <- aseRatios %>%
+refBias <- ratios %>%
   purrr::reduce(rbind) %>%
   group_by(sample) %>%
   summarise(mean = mean(refRatio), median = median(refRatio))
-altBias <- aseRatios %>%
+altBias <- ratios %>%
   purrr::reduce(rbind) %>%
   group_by(sample) %>%
   summarise(mean = mean(altRatio), median = median(altRatio))
@@ -342,8 +449,10 @@ Static ASE is ...
 
 ## GeneiASE export
 
-```{r}
-staticCounts <- lapply(exonCounts, function(x){
+For static ASE geneiASE software requires ...
+
+```{r, results="hide"}
+staticCounts <- lapply(counts, function(x){
   x %>%
     left_join(altBias[,c("sample", "mean")]) %>%
     dplyr::select(
@@ -365,4 +474,30 @@ lapply(seq_along(staticCounts), function(x){
 })
 ```
 
-## GeneiASE import
+## Results
+
+```{r}
+files <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/16_geneiASE/output",
+  full.names = TRUE
+)
+```
+
+```{r}
+staticRes <- lapply(files, function(x){
+  sample <- basename(x) %>%
+    str_remove(".static.pval.tsv")
+  read_tsv(x) %>%
+    mutate(sample = sample) %>%
+    dplyr::arrange(fdr)
+}) %>%
+  set_names(samples)
+```
+
+```{r}
+upset <- lapply(staticRes, function(x){
+  pull(x, feat)
+})
+upset(fromList(upset), order.by = "freq", nsets = 24)
+```
+
