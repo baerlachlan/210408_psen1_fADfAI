@@ -52,7 +52,7 @@ rule unzip_refFa:
 	input:
 		REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.gz"
 	output:
-		temp(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa")
+		temp("refs/Danio_rerio.GRCz11.dna.primary_assembly.fa")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -66,7 +66,7 @@ rule unzip_refFa:
 
 rule star_index:
 	input:
-		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
+		refFa = "refs/Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		gtf = REFDIR + "Danio_rerio.GRCz11.101.chr.gtf.gz"
 	output:
 		temp(directory(REFDIR + "star/"))
@@ -99,9 +99,9 @@ rule star_index:
 ## https://gatk.broadinstitute.org/hc/en-us/articles/360035531652-FASTA-Reference-genome-format
 rule ref_dict:
 	input:
-		REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa"
+		"refs/Danio_rerio.GRCz11.dna.primary_assembly.fa"
 	output:
-		temp(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.dict")
+		temp("refs/Danio_rerio.GRCz11.dna.primary_assembly.dict")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -115,9 +115,9 @@ rule ref_dict:
 
 rule ref_index:
 	input:
-		REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa"
+		"refs/Danio_rerio.GRCz11.dna.primary_assembly.fa"
 	output:
-		temp(REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa.fai")
+		temp("refs/Danio_rerio.GRCz11.dna.primary_assembly.fa.fai")
 	conda:
 		"snakemake/envs/default.yaml"
 	resources:
@@ -683,39 +683,6 @@ rule mergeSelected:
 		"""
 		bcftools merge --threads {resources.cpu} -o {output.vcf} -O z {input.vcf}
 		bcftools index --threads {resources.cpu} -t {output.vcf}
-		"""
-
-rule countAlleles:
-	input:
-		bam = "10_applyRecal/bam/{SAMPLE}.bam",
-		bamIndex = "10_applyRecal/bam/{SAMPLE}.bai",
-		refFa = REFDIR + "Danio_rerio.GRCz11.dna.primary_assembly.fa",
-		intervals = "14_countAlleles/intervals/snvs.intervals"
-	output:
-		counts = "14_countAlleles/counts/{SAMPLE}.alleleCounts.tsv"
-	conda:
-		"snakemake/envs/default.yaml"
-	resources:
-		cpu = 1,
-		ntasks = 1,
-		mem_mb = 8000,
-		hours = 2,
-		mins = 0
-	shell:
-		"""
-		gatk --java-options "-Xms6000m -XX:GCTimeLimit=50 -XX:GCHeapFreeLimit=10" \
-			CollectAllelicCounts \
-			-I {input.bam} \
-			-R {input.refFa} \
-			-L {input.intervals} \
-			-O {output.counts} \
-			--read-filter NotSecondaryAlignmentReadFilter \
-			--read-filter GoodCigarReadFilter \
-			--read-filter PassesVendorQualityCheckReadFilter \
-			--read-filter MappingQualityAvailableReadFilter
-
-		## Remove header
-		sed -i '/^@/d' {output.counts}
 		"""
 
 rule aseReadCounts:
