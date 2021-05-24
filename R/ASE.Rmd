@@ -487,7 +487,7 @@ lapply(seq_along(staticCounts), function(x){
 })
 ```
 
-## Load results
+## Load ASE results
 
 ```{r}
 files <- list.files(
@@ -497,28 +497,29 @@ files <- list.files(
 ```
 
 ```{r}
-aliases <- tibble(
-  sample = metadata$sample,
-  alias = c(
-    paste0(rep("fAD", 7), seq(1, 7)),
-    paste0(rep("fAI", 8), seq(1, 8)),
-    paste0(rep("wt", 9), seq(1, 9))
+## We need some sample aliases that follow R naming conventions
+## Otherwise we run into errors when building upset plots
+metadata <- metadata %>%
+  mutate(
+    alias = c(
+      paste0(rep("fAD", 7), seq(1, 7)),
+      paste0(rep("fAI", 8), seq(1, 8)),
+      paste0(rep("wt", 9), seq(1, 9))
+    )
   )
-) %>% 
-  left_join(metadata)
-fad <- aliases %>%
+fad <- metadata %>%
   dplyr::filter(genotype == "EOfAD-like/+") %>%
   pull(alias)
-fai <- aliases %>%
+fai <- metadata %>%
   dplyr::filter(genotype == "fAI-like/+") %>%
   pull(alias)
-wt <- aliases %>%
+wt <- metadata %>%
   dplyr::filter(genotype == "WT") %>%
   pull(alias)
 ```
 
 ```{r}
-staticRes <- lapply(files, function(x){
+topASE <- lapply(files, function(x){
   sample <- basename(x) %>%
     str_remove(".static.pval.tsv")
   read_tsv(x) %>%
@@ -526,22 +527,22 @@ staticRes <- lapply(files, function(x){
       sig = fdr < 0.05,
       sample = sample
     ) %>%
-    left_join(aliases[,c("sample", "alias", "genotype")]) %>%
+    left_join(metadata[,c("sample", "alias", "genotype")]) %>%
     dplyr::arrange(fdr)
 }) %>%
-  set_names(aliases$alias[match(samples, aliases$sample)])
+  set_names(metadata$alias[match(samples, metadata$sample)])
 ```
 
 ```{r}
-staticSig <- lapply(staticRes, function(x){
+sigASE <- lapply(topASE, function(x){
   x %>% dplyr::filter(sig)
 })
-genesSig <- lapply(staticSig, function(x){
+sigASE_genes <- lapply(sigASE, function(x){
   pull(x, feat)
 })
 ```
 
-## UpSets
+## Common ASE genes
 
 ### EOfAD
 
@@ -550,19 +551,19 @@ intAll <- list(as.list(fad))
 intMost <- combn(fad, 6, simplify = FALSE) %>%
   lapply(as.list)
 intSingle <- as.list(fad)
-intFemale <- aliases %>%
+intFemale <- metadata %>%
   dplyr::filter(genotype == "EOfAD-like/+", Sex == "F") %>%
   pull(alias) %>%
   as.list() %>%
   list()
-intMale <- aliases %>%
+intMale <- metadata %>%
   dplyr::filter(genotype == "EOfAD-like/+", Sex == "M") %>%
   pull(alias) %>%
   as.list() %>%
   list()
 intersections <- c(intAll, intMost, intSingle, intFemale, intMale)
 upset(
-  fromList(genesSig),
+  fromList(sigASE_genes),
   intersections = intersections,
   sets.x.label = "Significant genes",
   order.by = "degree",
@@ -589,19 +590,19 @@ intAll <- list(as.list(fai))
 intMost <- combn(fai, 7, simplify = FALSE) %>%
   lapply(as.list)
 intSingle <- as.list(fai)
-intFemale <- aliases %>%
+intFemale <- metadata %>%
   dplyr::filter(genotype == "fAI-like/+", Sex == "F") %>%
   pull(alias) %>%
   as.list() %>%
   list()
-intMale <- aliases %>%
+intMale <- metadata %>%
   dplyr::filter(genotype == "fAI-like/+", Sex == "M") %>%
   pull(alias) %>%
   as.list() %>%
   list()
 intersections <- c(intAll, intMost, intSingle, intFemale, intMale)
 upset(
-  fromList(genesSig),
+  fromList(sigASE_genes),
   intersections = intersections,
   sets.x.label = "Significant genes",
   order.by = "degree",
@@ -629,19 +630,19 @@ intAll <- list(as.list(wt))
 intMost <- combn(wt, 8, simplify = FALSE) %>%
   lapply(as.list)
 intSingle <- as.list(wt)
-intFemale <- aliases %>%
+intFemale <- metadata %>%
   dplyr::filter(genotype == "WT", Sex == "F") %>%
   pull(alias) %>%
   as.list() %>%
   list()
-intMale <- aliases %>%
+intMale <- metadata %>%
   dplyr::filter(genotype == "WT", Sex == "M") %>%
   pull(alias) %>%
   as.list() %>%
   list()
 intersections <- c(intAll, intMost, intSingle, intFemale, intMale)
 upset(
-  fromList(genesSig),
+  fromList(sigASE_genes),
   intersections = intersections,
   sets.x.label = "Significant genes",
   order.by = "degree",
@@ -666,8 +667,8 @@ upset(
 ### All
 
 ```{r}
-intAll <- list(as.list(aliases$alias))
-intMost_all <- combn(aliases$alias, 23, simplify = FALSE) %>%
+intAll <- list(as.list(metadata$alias))
+intMost_all <- combn(metadata$alias, 23, simplify = FALSE) %>%
   lapply(as.list)
 intwt <- list(as.list(wt))
 intMost_wt <- combn(wt, 8, simplify = FALSE) %>%
@@ -678,12 +679,12 @@ intMost_fad <- combn(fad, 6, simplify = FALSE) %>%
 intfai <- list(as.list(fai))
 intMost_fai <- combn(fai, 7, simplify = FALSE) %>%
   lapply(as.list)
-intSingle <- as.list(aliases$alias)
+intSingle <- as.list(metadata$alias)
 intersections <- c(
   intAll, intMost_all, intwt, intSingle, intMost_wt, intfai, intMost_fai, intfad, intMost_fad
 )
 upset(
-  fromList(genesSig),
+  fromList(sigASE_genes),
   intersections = intersections,
   sets.x.label = "Significant genes",
   order.by = "degree",
@@ -748,10 +749,10 @@ upset(
 
 ```{r}
 upset(
-  fromList(genesSig),
+  fromList(sigASE_genes),
   nintersects = 75,
   nsets = 24,
-  sets = aliases$alias,
+  sets = metadata$alias,
   sets.x.label = "Significant genes",
   order.by = "freq",
   keep.order = TRUE,
@@ -759,10 +760,142 @@ upset(
 )
 ```
 
-##
+## DE genes
 
 ```{r}
-staticRes %>%
-  purrr::reduce(rbind) %>%
-  dplyr::filter(feat == "ENSDARG00000004870")
+topDE <- readRDS(here("files/toptable_raw.rds")) %>%
+  set_names(c("fAD", "fAI"))
+fadDE <- topDE$fAD %>%
+  dplyr::filter(DE) %>%
+  pull(gene_id)
+faiDE <- topDE$fAI %>%
+  dplyr::filter(DE) %>%
+  pull(gene_id)
 ```
+
+```{r}
+fadASE <- lapply(topASE, function(x){
+  x %>% 
+    dplyr::filter(feat %in% fadDE) %>%
+    mutate(symbol = idToSym(feat, genes))
+}) %>%
+  purrr::reduce(rbind) %>%
+  split(f = .$symbol) %>%
+  lapply(dplyr::arrange, fdr)
+faiASE <- lapply(topASE, function(x){
+  x %>% 
+    dplyr::filter(feat %in% faiDE) %>%
+    mutate(symbol = idToSym(feat, genes))
+}) %>%
+  purrr::reduce(rbind) %>%
+  split(f = .$symbol) %>%
+  lapply(dplyr::arrange, fdr)
+```
+
+```{r}
+fadASE_summary <- lapply(fadASE, function(x){
+  x %>%
+    group_by(feat, genotype) %>%
+    summarise(sig = sum(sig), notSig = n() - sum(sig)) %>%
+    ungroup()
+})
+faiASE_summary <- lapply(faiASE, function(x){
+  x %>%
+    group_by(feat, genotype) %>%
+    summarise(sig = sum(sig), notSig = n() - sum(sig)) %>%
+    ungroup()
+})
+```
+
+## Manhattan plots
+
+```{r}
+man <- topTableLoc %>%
+  dplyr::filter(as.integer(seqnames) %in% seq(1, 25)) %>%
+  group_by(seqnames) %>%
+  summarise(chrLen = max(mid)) %>%
+  mutate(chrSt = cumsum(chrLen)-chrLen) %>%
+  dplyr::select(-chrLen) %>% 
+  left_join(topTableLoc) %>%
+  dplyr::arrange(seqnames, mid) %>% 
+  mutate(midCum = chrSt + mid)
+axis <- man %>%
+  group_by(seqnames) %>%
+  dplyr::arrange(seqnames) %>%
+  summarize(center = (max(midCum) + min(midCum)) / 2) %>%
+  mutate(
+    seqnames = as.numeric(seqnames),
+    colour = rep(c("grey40", "black"), length.out = 25),
+    colour = ifelse(seqnames == 17, "red", colour)
+  )
+ggplot(man, aes(x = midCum, y = -log10(P.Value))) +
+  geom_point(aes(color=as.factor(seqnames)), alpha = 0.5, size = 1) +
+  scale_color_manual(values = axis$colour) +
+  scale_x_continuous(label = axis$seqnames, breaks = axis$center) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0,10)) +
+  labs(x = "Chromosome", y = expression(paste(-log[10], "(p)"))) +
+  geom_text_repel(data = dplyr::filter(man, DE), aes(label = Symbol)) +
+  theme( 
+    legend.position="none",
+    panel.border = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+```
+
+```{r}
+topASE_Loc <- lapply(topASE, function(x){
+  x %>%
+    left_join(as.data.frame(genes), by = c("feat" = "gene_id")) %>%
+    mutate(
+      seqnames = as.numeric(seqnames),
+      mid = (start + end) / 2
+    ) %>%
+    dplyr::select(
+      feat, gene_name, seqnames, mid, p.nom, fdr, sig, sample, alias, 
+      genotype
+    )
+})
+manTables <- lapply(topASE_Loc, function(x){
+  x %>%
+    group_by(seqnames) %>%
+    summarise(chrLen = max(mid)) %>%
+    dplyr::arrange(seqnames) %>%
+    mutate(chrSt = cumsum(chrLen)-chrLen) %>%
+    dplyr::select(-chrLen) %>%
+    right_join(x) %>%
+    dplyr::arrange(seqnames, mid) %>% 
+    mutate(midCum = chrSt + mid)
+})
+manAxes <- lapply(manTables, function(x){
+  x %>%
+    group_by(seqnames) %>%
+    dplyr::arrange(seqnames) %>%
+    summarize(center = (max(midCum) + min(midCum)) / 2) %>%
+    mutate(
+      seqnames = as.numeric(seqnames),
+      colour = rep(c("grey40", "black"), length.out = 25),
+      colour = ifelse(seqnames == 17, "red", colour)
+    )
+})
+manPlots <- lapply(seq_along(manTables), function(x){
+  manTables[[x]] %>%
+    ggplot(aes(x = midCum, y = -log10(fdr))) +
+    geom_point(aes(color=as.factor(seqnames)), alpha = 0.5, size = 1) +
+    scale_color_manual(values = manAxes[[x]]$colour) +
+    scale_x_continuous(label = manAxes[[x]]$seqnames, breaks = manAxes[[x]]$center) +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_cartesian(ylim = c(0,10)) +
+    labs(x = "Chromosome", y = expression(paste(-log[10], "(p)"))) +
+    geom_hline(yintercept=-log10(0.00001)) +
+    # geom_text_repel(data = dplyr::filter(manT, DE), aes(label = Symbol)) +
+    theme( 
+      legend.position="none",
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+})
+```
+
