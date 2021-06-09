@@ -1,0 +1,124 @@
+---
+title: "Allele Specific Expression Analysis"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Setup 
+
+```{r packages}
+library(tidyverse)
+library(magrittr)
+library(parallel)
+library(here)
+library(AnnotationHub)
+library(purrr)
+library(scales)
+library(kableExtra)
+library(UpSetR)
+```
+
+```{r options}
+if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores <- detectCores() - 1
+```
+
+```{r}
+source("~/bioinformatics/lbBioUtils/lbFuncs.R")
+```
+
+## EnsDb
+
+```{r}
+ah <- AnnotationHub() %>%
+  subset(species == "Danio rerio") %>%
+  subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH83189"]] ## Ens101
+genes <- genes(ensDb)
+mcols(genes) <- mcols(genes)[
+  c("gene_id", "gene_name", "gene_biotype", "entrezid")
+]
+exons <- exonsBy(ensDb, by = "gene")
+```
+
+# Load data
+
+```{r}
+hmcs <- read_tsv("/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/16_geneiASE_hm/output/7_KB_B12.static.pval.tsv")
+stouffer <- read_tsv("/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_geneiASE/output/7_KB_B12.static.pval.tsv")
+```
+
+## Metadata
+
+```{r}
+metadata <- read_csv(here("files/samples.csv")) %>%
+  dplyr::select(-sample) %>%
+  dplyr::rename(sample = basename, genotype = Genotype)
+metadata %>%
+  kable(
+    align = "lllllll"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+```{r}
+fad <- metadata %>%
+  dplyr::filter(genotype == "EOfAD-like/+") %>%
+  pull(sample)
+fai <- metadata %>%
+  dplyr::filter(genotype == "fAI-like/+") %>%
+  pull(sample)
+wt <- metadata %>%
+  dplyr::filter(genotype == "WT") %>%
+  pull(sample)
+```
+
+# Compare
+
+## FDR scatterplot
+
+```{r}
+tibble(hmcs = hmcs$fdr, stouffer = stouffer$fdr) %>%
+  ggplot(aes(stouffer, hmcs)) +
+  geom_point()
+```
+
+## p-value distributions
+
+```{r}
+hmcs %>%
+  ggplot(aes(p.nom)) +
+  geom_histogram(bins = 100)
+```
+
+```{r}
+stouffer %>%
+  ggplot(aes(p.nom)) +
+  geom_histogram(bins = 100)
+```
+
