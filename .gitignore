@@ -34,3 +34,5 @@ slurm/*
 *.intervals
 *alleleCounts.tsv
 14_aseReadCounts/*
+refs/*
+smk/log/*
