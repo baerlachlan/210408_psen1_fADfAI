@@ -37,6 +37,7 @@ library(AnnotationHub)
 library(purrr)
 library(scales)
 library(kableExtra)
+library(UpSetR)
 ```
 
 ```{r options}
@@ -80,6 +81,18 @@ metadata %>%
   )
 ```
 
+```{r}
+fad <- metadata %>%
+  dplyr::filter(genotype == "EOfAD-like/+") %>%
+  pull(sample)
+fai <- metadata %>%
+  dplyr::filter(genotype == "fAI-like/+") %>%
+  pull(sample)
+wt <- metadata %>%
+  dplyr::filter(genotype == "WT") %>%
+  pull(sample)
+```
+
 ## Counts
 
 Heterozygous SNPs detected by `ASEReadCounter` were recorded in a seperate `tsv`
@@ -89,7 +102,7 @@ data for ASE analysis.
 
 ```{r}
 files <- list.files(
-  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_aseReadCounts",
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/14_aseReadCounts",
   full.names = TRUE
 )
 samples <- basename(files) %>%
@@ -248,7 +261,7 @@ counts %>%
     y = "Cumulative distribution",
     caption = ""
   ) +
-  theme(legend.position = "none") 
+  theme(legend.position = "none")
 ```
 
 ```{r, fig.cap="*The number of het-SNPs per sample that satisfy read coverage cut-offs*"}
@@ -461,7 +474,7 @@ staticCounts <- lapply(counts, function(x){
 })
 lapply(seq_along(staticCounts), function(x){
   path <- paste0(
-    "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/16_geneiASE/input/",
+    "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_geneiASE/input/",
     names(staticCounts[x]),
     ".static.tsv"
   )
@@ -474,30 +487,415 @@ lapply(seq_along(staticCounts), function(x){
 })
 ```
 
-## Results
+## Load ASE results
 
 ```{r}
 files <- list.files(
-  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/16_geneiASE/output",
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_geneiASE/output",
   full.names = TRUE
 )
 ```
 
 ```{r}
-staticRes <- lapply(files, function(x){
-  sample <- basename(x) %>%
-    str_remove(".static.pval.tsv")
-  read_tsv(x) %>%
-    mutate(sample = sample) %>%
-    dplyr::arrange(fdr)
-}) %>%
-  set_names(samples)
+## We need some sample aliases that follow R naming conventions
+## Otherwise we run into errors when building upset plots
+metadata <- metadata %>%
+  mutate(
+    alias = c(
+      paste0(rep("fAD", 7), seq(1, 7)),
+      paste0(rep("fAI", 8), seq(1, 8)),
+      paste0(rep("wt", 9), seq(1, 9))
+    )
+  )
+fad <- metadata %>%
+  dplyr::filter(genotype == "EOfAD-like/+") %>%
+  pull(alias)
+fai <- metadata %>%
+  dplyr::filter(genotype == "fAI-like/+") %>%
+  pull(alias)
+wt <- metadata %>%
+  dplyr::filter(genotype == "WT") %>%
+  pull(alias)
 ```
 
 ```{r}
-upset <- lapply(staticRes, function(x){
+topASE <- lapply(files, function(x){
+  sample <- basename(x) %>%
+    str_remove(".static.pval.tsv")
+  read_tsv(x) %>%
+    mutate(
+      sig = fdr < 0.05,
+      sample = sample
+    ) %>%
+    left_join(metadata[,c("sample", "alias", "genotype")]) %>%
+    dplyr::arrange(fdr)
+}) %>%
+  set_names(metadata$alias[match(samples, metadata$sample)])
+```
+
+```{r}
+sigASE <- lapply(topASE, function(x){
+  x %>% dplyr::filter(sig)
+})
+sigASE_genes <- lapply(sigASE, function(x){
   pull(x, feat)
 })
-upset(fromList(upset), order.by = "freq", nsets = 24)
+```
+
+## Common ASE genes
+
+### EOfAD
+
+```{r}
+intAll <- list(as.list(fad))
+intMost <- combn(fad, 6, simplify = FALSE) %>%
+  lapply(as.list)
+intSingle <- as.list(fad)
+intFemale <- metadata %>%
+  dplyr::filter(genotype == "EOfAD-like/+", Sex == "F") %>%
+  pull(alias) %>%
+  as.list() %>%
+  list()
+intMale <- metadata %>%
+  dplyr::filter(genotype == "EOfAD-like/+", Sex == "M") %>%
+  pull(alias) %>%
+  as.list() %>%
+  list()
+intersections <- c(intAll, intMost, intSingle, intFemale, intMale)
+upset(
+  fromList(sigASE_genes),
+  intersections = intersections,
+  sets.x.label = "Significant genes",
+  order.by = "degree",
+  keep.order = TRUE,
+  queries = list(
+    list(query = intersects, params = intAll, color = "red", active = TRUE),
+    list(query = intersects, params = intMost[[1]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[2]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[3]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[4]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[5]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[6]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[7]], color = "blue", active = TRUE),
+    list(query = intersects, params = intFemale, color = "orange", active = TRUE),
+    list(query = intersects, params = intMale, color = "darkgreen", active = TRUE)
+  )
+)
+```
+
+### fAI
+
+```{r}
+intAll <- list(as.list(fai))
+intMost <- combn(fai, 7, simplify = FALSE) %>%
+  lapply(as.list)
+intSingle <- as.list(fai)
+intFemale <- metadata %>%
+  dplyr::filter(genotype == "fAI-like/+", Sex == "F") %>%
+  pull(alias) %>%
+  as.list() %>%
+  list()
+intMale <- metadata %>%
+  dplyr::filter(genotype == "fAI-like/+", Sex == "M") %>%
+  pull(alias) %>%
+  as.list() %>%
+  list()
+intersections <- c(intAll, intMost, intSingle, intFemale, intMale)
+upset(
+  fromList(sigASE_genes),
+  intersections = intersections,
+  sets.x.label = "Significant genes",
+  order.by = "degree",
+  keep.order = TRUE,
+  queries = list(
+    list(query = intersects, params = intAll, color = "red", active = TRUE),
+    list(query = intersects, params = intMost[[1]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[2]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[3]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[4]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[5]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[6]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[7]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[8]], color = "blue", active = TRUE),
+    list(query = intersects, params = intFemale, color = "orange", active = TRUE),
+    list(query = intersects, params = intMale, color = "darkgreen", active = TRUE)
+  )
+)
+```
+
+### WT
+
+```{r}
+intAll <- list(as.list(wt))
+intMost <- combn(wt, 8, simplify = FALSE) %>%
+  lapply(as.list)
+intSingle <- as.list(wt)
+intFemale <- metadata %>%
+  dplyr::filter(genotype == "WT", Sex == "F") %>%
+  pull(alias) %>%
+  as.list() %>%
+  list()
+intMale <- metadata %>%
+  dplyr::filter(genotype == "WT", Sex == "M") %>%
+  pull(alias) %>%
+  as.list() %>%
+  list()
+intersections <- c(intAll, intMost, intSingle, intFemale, intMale)
+upset(
+  fromList(sigASE_genes),
+  intersections = intersections,
+  sets.x.label = "Significant genes",
+  order.by = "degree",
+  keep.order = TRUE,
+  queries = list(
+    list(query = intersects, params = intAll, color = "red", active = TRUE),
+    list(query = intersects, params = intMost[[1]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[2]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[3]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[4]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[5]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[6]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[7]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[8]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost[[9]], color = "blue", active = TRUE),
+    list(query = intersects, params = intFemale, color = "orange", active = TRUE),
+    list(query = intersects, params = intMale, color = "darkgreen", active = TRUE)
+  )
+)
+```
+
+### All
+
+```{r}
+intAll <- list(as.list(metadata$alias))
+intMost_all <- combn(metadata$alias, 23, simplify = FALSE) %>%
+  lapply(as.list)
+intwt <- list(as.list(wt))
+intMost_wt <- combn(wt, 8, simplify = FALSE) %>%
+  lapply(as.list)
+intfad <- list(as.list(fad))
+intMost_fad <- combn(fad, 6, simplify = FALSE) %>%
+  lapply(as.list)
+intfai <- list(as.list(fai))
+intMost_fai <- combn(fai, 7, simplify = FALSE) %>%
+  lapply(as.list)
+intSingle <- as.list(metadata$alias)
+intersections <- c(
+  intAll, intMost_all, intwt, intSingle, intMost_wt, intfai, intMost_fai, intfad, intMost_fad
+)
+upset(
+  fromList(sigASE_genes),
+  intersections = intersections,
+  sets.x.label = "Significant genes",
+  order.by = "degree",
+  keep.order = TRUE,
+  mb.ratio = c(0.5, 0.5),
+  queries = list(
+    list(query = intersects, params = intAll, color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[1]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[2]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[3]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[4]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[5]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[6]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[7]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[8]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[9]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[10]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[11]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[12]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[13]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[14]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[15]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[16]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[17]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[18]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[19]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[20]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[21]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[22]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[23]], color = "red", active = TRUE),
+    list(query = intersects, params = intMost_all[[24]], color = "red", active = TRUE),
+    list(query = intersects, params = intwt, color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[1]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[2]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[3]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[4]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[5]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[6]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[7]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[8]], color = "blue", active = TRUE),
+    list(query = intersects, params = intMost_wt[[9]], color = "blue", active = TRUE),
+    list(query = intersects, params = intfai, color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[1]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[2]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[3]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[4]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[5]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[6]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[7]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intMost_fai[[8]], color = "darkgreen", active = TRUE),
+    list(query = intersects, params = intfad, color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[1]], color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[2]], color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[3]], color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[4]], color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[5]], color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[6]], color = "orange", active = TRUE),
+    list(query = intersects, params = intMost_fad[[7]], color = "orange", active = TRUE)
+  )
+)
+```
+
+```{r}
+upset(
+  fromList(sigASE_genes),
+  nintersects = 75,
+  nsets = 24,
+  sets = metadata$alias,
+  sets.x.label = "Significant genes",
+  order.by = "freq",
+  keep.order = TRUE,
+  mb.ratio = c(0.5, 0.5)
+)
+```
+
+## DE genes
+
+```{r}
+topDE <- readRDS(here("files/toptable_raw.rds")) %>%
+  set_names(c("fAD", "fAI"))
+fadDE <- topDE$fAD %>%
+  dplyr::filter(DE) %>%
+  pull(gene_id)
+faiDE <- topDE$fAI %>%
+  dplyr::filter(DE) %>%
+  pull(gene_id)
+```
+
+```{r}
+fadASE <- lapply(topASE, function(x){
+  x %>% 
+    dplyr::filter(feat %in% fadDE) %>%
+    mutate(symbol = idToSym(feat, genes))
+}) %>%
+  purrr::reduce(rbind) %>%
+  split(f = .$symbol) %>%
+  lapply(dplyr::arrange, fdr)
+faiASE <- lapply(topASE, function(x){
+  x %>% 
+    dplyr::filter(feat %in% faiDE) %>%
+    mutate(symbol = idToSym(feat, genes))
+}) %>%
+  purrr::reduce(rbind) %>%
+  split(f = .$symbol) %>%
+  lapply(dplyr::arrange, fdr)
+```
+
+```{r}
+fadASE_summary <- lapply(fadASE, function(x){
+  x %>%
+    group_by(feat, genotype) %>%
+    summarise(sig = sum(sig), notSig = n() - sum(sig)) %>%
+    ungroup()
+})
+faiASE_summary <- lapply(faiASE, function(x){
+  x %>%
+    group_by(feat, genotype) %>%
+    summarise(sig = sum(sig), notSig = n() - sum(sig)) %>%
+    ungroup()
+})
+```
+
+## Manhattan plots
+
+```{r}
+man <- topTableLoc %>%
+  dplyr::filter(as.integer(seqnames) %in% seq(1, 25)) %>%
+  group_by(seqnames) %>%
+  summarise(chrLen = max(mid)) %>%
+  mutate(chrSt = cumsum(chrLen)-chrLen) %>%
+  dplyr::select(-chrLen) %>% 
+  left_join(topTableLoc) %>%
+  dplyr::arrange(seqnames, mid) %>% 
+  mutate(midCum = chrSt + mid)
+axis <- man %>%
+  group_by(seqnames) %>%
+  dplyr::arrange(seqnames) %>%
+  summarize(center = (max(midCum) + min(midCum)) / 2) %>%
+  mutate(
+    seqnames = as.numeric(seqnames),
+    colour = rep(c("grey40", "black"), length.out = 25),
+    colour = ifelse(seqnames == 17, "red", colour)
+  )
+ggplot(man, aes(x = midCum, y = -log10(P.Value))) +
+  geom_point(aes(color=as.factor(seqnames)), alpha = 0.5, size = 1) +
+  scale_color_manual(values = axis$colour) +
+  scale_x_continuous(label = axis$seqnames, breaks = axis$center) +
+  scale_y_continuous(expand = c(0, 0)) +
+  coord_cartesian(ylim = c(0,10)) +
+  labs(x = "Chromosome", y = expression(paste(-log[10], "(p)"))) +
+  geom_text_repel(data = dplyr::filter(man, DE), aes(label = Symbol)) +
+  theme( 
+    legend.position="none",
+    panel.border = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor.x = element_blank()
+  )
+```
+
+```{r}
+topASE_Loc <- lapply(topASE, function(x){
+  x %>%
+    left_join(as.data.frame(genes), by = c("feat" = "gene_id")) %>%
+    mutate(
+      seqnames = as.numeric(seqnames),
+      mid = (start + end) / 2
+    ) %>%
+    dplyr::select(
+      feat, gene_name, seqnames, mid, p.nom, fdr, sig, sample, alias, 
+      genotype
+    )
+})
+manTables <- lapply(topASE_Loc, function(x){
+  x %>%
+    group_by(seqnames) %>%
+    summarise(chrLen = max(mid)) %>%
+    dplyr::arrange(seqnames) %>%
+    mutate(chrSt = cumsum(chrLen)-chrLen) %>%
+    dplyr::select(-chrLen) %>%
+    right_join(x) %>%
+    dplyr::arrange(seqnames, mid) %>% 
+    mutate(midCum = chrSt + mid)
+})
+manAxes <- lapply(manTables, function(x){
+  x %>%
+    group_by(seqnames) %>%
+    dplyr::arrange(seqnames) %>%
+    summarize(center = (max(midCum) + min(midCum)) / 2) %>%
+    mutate(
+      seqnames = as.numeric(seqnames),
+      colour = rep(c("grey40", "black"), length.out = 25),
+      colour = ifelse(seqnames == 17, "red", colour)
+    )
+})
+manPlots <- lapply(seq_along(manTables), function(x){
+  manTables[[x]] %>%
+    ggplot(aes(x = midCum, y = -log10(fdr))) +
+    geom_point(aes(color=as.factor(seqnames)), alpha = 0.5, size = 1) +
+    scale_color_manual(values = manAxes[[x]]$colour) +
+    scale_x_continuous(label = manAxes[[x]]$seqnames, breaks = manAxes[[x]]$center) +
+    scale_y_continuous(expand = c(0, 0)) +
+    coord_cartesian(ylim = c(0,10)) +
+    labs(x = "Chromosome", y = expression(paste(-log[10], "(p)"))) +
+    geom_hline(yintercept=-log10(0.00001)) +
+    # geom_text_repel(data = dplyr::filter(manT, DE), aes(label = Symbol)) +
+    theme( 
+      legend.position="none",
+      panel.border = element_blank(),
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    )
+})
 ```
 
