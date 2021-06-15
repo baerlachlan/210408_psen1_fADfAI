@@ -1,11 +1,11 @@
 rule fastqc_align:
 	input:
-		"03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"
+		"03_align/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"
 	output:
-		"03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.zip",
-		"03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.html"
+		"03_align/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.zip",
+		"03_align/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.html"
 	params:
-		outDir = "03_alignedData/FastQC/"
+		outDir = "03_align/FastQC/"
 	conda:
 		"../envs/ase.yaml"
 	resources:

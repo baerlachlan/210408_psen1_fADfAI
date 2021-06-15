@@ -3,9 +3,9 @@ rule trim:
 		R1 = "01_addUmiHeader/fastq/{SAMPLE}_R1.fastq.gz",
 		R2 = "01_addUmiHeader/fastq/{SAMPLE}_R2.fastq.gz"
 	output:
-		R1 = temp("02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz"),
-		R2 = temp("02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz"),
-		html = "02_trimmedData/log/{SAMPLE}.html"
+		R1 = temp("02_trim/fastq/{SAMPLE}_R1.fastq.gz"),
+		R2 = temp("02_trim/fastq/{SAMPLE}_R2.fastq.gz"),
+		html = "02_trim/log/{SAMPLE}.html"
 	conda:
 		"../envs/ase.yaml"
 	resources:

@@ -1,14 +1,14 @@
 rule align:
 	input:
-		R1 = "02_trimmedData/fastq/{SAMPLE}_R1.fastq.gz",
-		R2 = "02_trimmedData/fastq/{SAMPLE}_R2.fastq.gz",
+		R1 = "02_trim/fastq/{SAMPLE}_R1.fastq.gz",
+		R2 = "02_trim/fastq/{SAMPLE}_R2.fastq.gz",
 		starIndex = "refs/star/"
 	output:
-		bam = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"),
-		bamIndex = temp("03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai")
+		bam = temp("03_align/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"),
+		bamIndex = temp("03_align/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai")
 	params:
 		overhang = READ_LEN-1,
-		bname = "03_alignedData/bam/{SAMPLE}"
+		bname = "03_align/bam/{SAMPLE}"
 	conda:
 		"../envs/ase.yaml"
 	resources:
@@ -29,9 +29,9 @@ rule align:
 			--outFileNamePrefix {params.bname}
 
 
-		mkdir -p 03_alignedData/log
-		mv {params.bname}*out 03_alignedData/log
-		mv {params.bname}*tab 03_alignedData/log
+		mkdir -p 03_align/log
+		mv {params.bname}*out 03_align/log
+		mv {params.bname}*tab 03_align/log
 
 		samtools index {output.bam}
 		"""

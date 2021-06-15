@@ -1,7 +1,7 @@
 rule dedupUmis:
 	input:
-		bam = "03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam",
-		bamIndex = "03_alignedData/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai"
+		bam = "03_align/bam/{SAMPLE}Aligned.sortedByCoord.out.bam",
+		bamIndex = "03_align/bam/{SAMPLE}Aligned.sortedByCoord.out.bam.bai"
 	output:
 		bam = temp("04_dedupUmis/bam/{SAMPLE}.bam"),
 		bamIndex = temp("04_dedupUmis/bam/{SAMPLE}.bam.bai"),

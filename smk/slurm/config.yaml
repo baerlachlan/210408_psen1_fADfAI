@@ -19,7 +19,7 @@ max-status-checks-per-second: 5
 local-cores: 1
 use-conda: True
 latency-wait: 60
-keep-going: True
 rerun-incomplete: True
 printshellcmds: True
 scheduler: greedy
+notemp: True  ## If storage quotas permit, I prefer to use --delete-temp-output after completion of a newly established workflow.

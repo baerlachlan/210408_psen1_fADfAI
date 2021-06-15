@@ -1,11 +1,11 @@
 rule fastqc_trim:
 	input:
-		"02_trimmedData/fastq/{SAMPLE}.fastq.gz"
+		"02_trim/fastq/{SAMPLE}.fastq.gz"
 	output:
-		"02_trimmedData/FastQC/{SAMPLE}_fastqc.zip",
-		"02_trimmedData/FastQC/{SAMPLE}_fastqc.html"
+		"02_trim/FastQC/{SAMPLE}_fastqc.zip",
+		"02_trim/FastQC/{SAMPLE}_fastqc.html"
 	params:
-		outDir = "02_trimmedData/FastQC/"
+		outDir = "02_trim/FastQC/"
 	conda:
 		"../envs/ase.yaml"
 	resources:
