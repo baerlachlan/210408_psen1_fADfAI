@@ -1,0 +1,504 @@
+---
+title: "Allele Specific Expression Quality Control"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Setup 
+
+```{r packages}
+library(tidyverse)
+library(magrittr)
+library(parallel)
+library(here)
+library(AnnotationHub)
+library(purrr)
+library(scales)
+library(kableExtra)
+library(UpSetR)
+```
+
+```{r options}
+if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores <- detectCores() - 1
+```
+
+```{r}
+source("~/bioinformatics/bioToolkit/lbFuncs.R")
+```
+
+## EnsDb
+
+```{r}
+ah <- AnnotationHub() %>%
+  subset(species == "Danio rerio") %>%
+  subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH83189"]] ## Ens101
+genes <- genes(ensDb)
+mcols(genes) <- mcols(genes)[
+  c("gene_id", "gene_name", "gene_biotype", "entrezid")
+]
+exons <- exonsBy(ensDb, by = "gene")
+```
+
+# Load data
+
+## Metadata
+
+```{r}
+metadata <- read_csv(here("files/samples.csv")) %>%
+  dplyr::select(-sample) %>%
+  dplyr::rename(sample = basename, genotype = Genotype)
+metadata %>%
+  kable(
+    align = "lllllll"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+```{r}
+fad <- metadata %>%
+  dplyr::filter(genotype == "EOfAD-like/+") %>%
+  pull(sample)
+fai <- metadata %>%
+  dplyr::filter(genotype == "fAI-like/+") %>%
+  pull(sample)
+wt <- metadata %>%
+  dplyr::filter(genotype == "WT") %>%
+  pull(sample)
+```
+
+## Counts
+
+Heterozygous SNVs detected by `ASEReadCounter` were recorded in separate `tsv`
+files for each sample. 
+These were loaded into R as a list of tibbles containing the unprocessed raw 
+data for ASE analysis.
+
+```{r}
+files <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/14_aseReadCounts",
+  full.names = TRUE
+)
+samples <- basename(files) %>%
+  str_remove(".tsv")
+drChrs <- seq(1:25)
+```
+
+```{r}
+aseCounts <- lapply(files, function(file){
+  sample <- basename(file) %>%
+    str_remove(".tsv")
+  read_tsv(
+    file,
+    col_types = "cdcccdddddddd"
+  ) %>%
+    dplyr::filter(contig %in% as.character(drChrs)) %>%
+    mutate(
+      sample = sample,
+      allele = paste0(refAllele, ",", altAllele)
+    ) %>%
+    left_join(metadata[,c("sample", "genotype")]) %>%
+    dplyr::select(
+      chromosome = contig, position, allele, refCount, altCount, totalCount, 
+      sample, genotype, lowMAPQDepth, lowBaseQDepth, rawDepth, otherBases, 
+      improperPairs, refAllele, altAllele
+    )
+}) %>% 
+  set_names(samples)
+```
+
+The number of genome-wide het-SNV positions as reported by `ASEReadCounter` 
+ranged from `r comma(min(sapply(aseCounts, nrow)))` to
+`r comma(max(sapply(aseCounts, nrow)))` across all samples.
+
+```{r include=FALSE, eval=FALSE}
+# nucCols <- tibble(A = NA, C = NA, G = NA, T = NA) # In case a base is not detected
+# perBaseCounts <- lapply(aseCounts, function(x){
+#   x %>%
+#     mutate(allele = paste0(refAllele, ",", altAllele)) %>%
+#     pivot_longer(
+#       cols = c("refAllele", "altAllele"),
+#       names_to = "variant",
+#       values_to = "base"
+#     ) %>% 
+#     mutate(value = ifelse(variant == "refAllele", refCount, altCount)) %>%
+#     dplyr::select(-variant) %>%
+#     pivot_wider(names_from = base, values_from = value) %>%
+#     add_column(!!!nucCols[!names(nucCols) %in% names(.)]) %>% # Adds column of NA's if no detected base
+#     dplyr::select(
+#       chromosome = contig, position, allele, A, C, G, T, totalCount, 
+#       rawDepth, sample
+#     ) %>%
+#     left_join(metadata[,c("sample", "genotype")])
+# })
+# perBaseProps <- lapply(perBaseCounts, function(x){
+#   x %>%
+#     mutate(across(c(A, C, G, T), ~ ./totalCount))
+# })
+```
+
+# Quality control
+
+## ASEReadCounter
+
+GATK tool `ASEReadCounter` calculates allele counts at a set of positions
+after applying filters specifically tuned for AE analysis of RNA-seq data.
+The filters operate on mapping quality, base quality, depth of coverage and
+overlapping paired reads.
+Each of these filters can be controlled by command-line arguments.
+The data in this analysis was generated with the following options:
+
+* `--min-mapping-quality 10`
+* `--min-base-quality 20`
+* `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
++ Ths option counts all fragments where the base is consistent when mate pairs
+overlap.
+* `--min-depth-of-non-filtered-base -1`
++ This argument is disabled, because depth filtering was performed
+manually (see next section).
+
+```{r}
+filtProps <- aseCounts %>%
+  purrr::reduce(rbind) %>%
+  group_by(sample) %>%
+  summarise(
+    mapQ = sum(lowMAPQDepth) / sum(rawDepth),
+    baseQ = sum(lowBaseQDepth) / sum(rawDepth),
+    otherBases = sum(otherBases) / sum(rawDepth)
+  )
+```
+
+With the above settings across all samples, reads filtered due to insufficient 
+mapping quality ranged between `r percent(min(filtProps$mapQ), accuracy = 0.01)` 
+and `r percent(max(filtProps$mapQ), accuracy = 0.01)`, reads filtered due to
+base quality ranged between `r percent(min(filtProps$baseQ), accuracy = 0.01)` 
+and `r percent(max(filtProps$baseQ), accuracy = 0.01)`, and reads filtered due
+to overlapping mate pairs with inconsistent bases ranged between 
+`r percent(min(filtProps$otherBases), accuracy = 0.01)` and 
+`r percent(max(filtProps$otherBases), accuracy = 0.01)`.
+
+More information about recommended quality control measures can be found in
+[Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
+
+## Filtering
+
+### Exonic variants
+
+Since the variants originate from RNA-seq data, they were filtered based on 
+genomic position for those that lie in only exonic regions (Ensembl version 101).
+Gene identifiers were also annotated for each position to enable downstream 
+analysis of ASE across genes.
+
+```{r}
+exonOverlaps <- lapply(aseCounts, function(x){
+  indices <- x %>%
+    dplyr::select(seqnames = chromosome, start = position) %>%
+    mutate(end = start) %>%
+    makeGRangesFromDataFrame() %>%
+    findOverlaps(exons)
+  tibble(
+    snvInd = as.data.frame(indices)$queryHits,
+    geneInd = as.data.frame(indices)$subjectHits
+  )
+})
+```
+
+```{r}
+counts <- lapply(seq_along(aseCounts), function(x){
+  aseCounts[[x]][exonOverlaps[[x]]$snvInd,] %>%
+    cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %>%
+    as_tibble() %>%
+    rownames_to_column("snvID")
+}) %>%
+  set_names(samples)
+```
+
+After filtering for SNVs in exonic regions, the remaining number of het-SNVs 
+ranged from `r comma(min(sapply(counts, nrow)))` to
+`r comma(max(sapply(counts, nrow)))` across all samples.
+
+### Coverage 
+
+Another important QC step before ASE anyalysis involves filtering Het-SNV sites
+based on coverage, as sites with low total counts are uninformative.
+
+Firstly, a quick inspection of coverage distribution was performed:
+
+```{r, fig.cap="*Cumulative distribution of RNA-seq read coverage per het-SNV. Each line represents a separate sample.*"}
+counts %>%
+  purrr::reduce(rbind) %>%
+  ggplot(aes(totalCount, colour = sample)) +
+  stat_ecdf(geom = "step") +
+  coord_cartesian(xlim = c(0, 400)) +
+  labs(
+    x = "Reads / het-SNV",
+    y = "Cumulative distribution",
+    caption = ""
+  ) +
+  theme(legend.position = "none")
+```
+
+```{r, fig.cap="*The number of het-SNVs per sample that satisfy read coverage cut-offs*"}
+lapply(counts, function(x){
+  n0 <- x %>%
+    dplyr::filter(totalCount >= 0) %>%
+    nrow()
+  n10 <- x %>%
+    dplyr::filter(totalCount >= 10) %>%
+    nrow()
+  n20 <- x %>%
+    dplyr::filter(totalCount >= 20) %>%
+    nrow()
+  n30 <- x %>%
+    dplyr::filter(totalCount >= 30) %>%
+    nrow()
+  n60 <- x %>%
+    dplyr::filter(totalCount >= 60) %>%
+    nrow()
+  sample <- unique(x$sample)
+  tibble(
+    bin = c("\u2265 0", "\u2265 10", "\u2265 20", "\u2265 30", "\u2265 60"),
+    n = c(n0, n10, n20, n30, n60),
+    sample = sample
+  )
+}) %>%
+  purrr::reduce(rbind) %>%
+  ggplot(aes(bin, n, fill = bin)) +
+  geom_boxplot() +
+  labs(x = "Reads / het-SNV", y = "het-SNVs per sample") +
+  theme(legend.position = "none")
+```
+
+```{r}
+counts <- lapply(counts, function(x){
+  dplyr::filter(x, totalCount >= 10)
+})
+```
+
+A cut-off of at least 10 counts per het-SNV position was applied, leaving
+`r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))`
+het-SNVs across all samples.
+
+### Mono-allelic expression
+
+Producing evidence of mono-allelic expression from short read RNA-seq datasets
+without parental genotypes or imprinting information is a controversial issue.
+Therefore, het-SNV sites were filtered based on a depth criteria for each allele
+($\ge$ 3 counts or $>$ 1% of the total counts for that allele).
+
+```{r}
+counts <- lapply(counts, function(x){
+  dplyr::filter(
+    x,
+    refCount >= 3,
+    altCount >= 3,
+    refCount / totalCount > 0.01,
+    altCount / totalCount > 0.01
+  )
+})
+```
+
+After filtering for mono-allelic expression, 
+`r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))`
+het-SNVs remained across all samples.
+
+### Summary
+
+```{r}
+genesWithSnvs <- lapply(counts, function(x){
+  sample <- unique(x$sample)
+  atLeast1 <- length(unique(x$gene))
+  atLeast2 <- x %>%
+    group_by(gene) %>%
+    summarise(n = n()) %>%
+    dplyr::filter(n >= 2) %>%
+    nrow()
+  snvs <- nrow(x)
+  tibble(sample = sample, atLeast1 = atLeast1, atLeast2 = atLeast2, snvs = snvs)
+}) %>%
+  purrr::reduce(rbind) %>%
+  left_join(metadata[,c("sample", "genotype")]) %>%
+  dplyr::arrange(genotype, sample)
+```
+
+The total number of genes and het-SNVs remaining after QC measures is summarised
+below:
+
+```{r}
+genesWithSnvs %>%
+  dplyr::select(
+    Sample = sample, Genotype = genotype, Genes = atLeast1, SNVs = snvs
+  ) %>%
+  kable(
+    align = "lll",
+    caption = paste(
+      "Overall numbers of genes and SNVs detected in each sample after filtering."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+## Reference mapping bias
+
+An important aspect to consider in AE analysis is the potential for mapping bias.
+For RNA-seq data mapped to a reference genome, reads that carry an alternate 
+allele at positions of variation have at least one mismatch, and therefore a 
+lower probability of aligning correctly than reads containing the reference 
+allele.
+To estimate this effect we can calculate the genome-wide reference ratio,
+which will indicate a reference mapping bias if above 0.5.
+This calculated ratio may be more suitable as the null in downstream statistical 
+testing.
+
+```{r}
+ratios <- lapply(counts, function(x){
+  x %>%
+    dplyr::filter(totalCount != 0) %>%
+    mutate(
+      refRatio = refCount / totalCount,
+      altRatio = altCount / totalCount
+    ) %>%
+    dplyr::select(
+      chromosome, position, allele, refRatio, altRatio, totalCount,
+      sample, genotype, gene
+    )
+})
+```
+
+```{r fig.cap="*Histogram of global reference allele ratios at each het-SNV faceted by sample. The distributions show a similar profile of reference mapping bias indicated by an inflation of reference allele ratios > 0.5. Allelic ratios above 0.51 are shown in blue and below 0.49 in red, while balanced expression (0.49-0.51) is coloured grey.*"}
+ratioDists <- purrr::reduce(ratios, rbind) %>%
+  mutate(
+    fill = ifelse(refRatio < 0.49, "less", NA),
+    fill = ifelse(between(refRatio, 0.49, 0.51), "even", fill),
+    fill = ifelse(refRatio > 0.51, "more", fill),
+  )
+ggplot(ratioDists, aes(refRatio)) +
+  geom_histogram(
+    data = subset(ratioDists, fill == "less"),
+    bins = 100, fill = "red"
+  ) +
+  geom_histogram(
+    data = subset(ratioDists, fill == "even"),
+    bins = 100, fill = "grey"
+  ) +
+  geom_histogram(
+    data = subset(ratioDists, fill == "more"),
+    bins = 100, fill = "blue"
+  ) +
+  labs(x = "Reference allele ratio", y = "Count") +
+  facet_wrap(~ sample, ncol = 4)
+```
+
+The mean reference mapping ratios were calculated for each sample.
+This value will be used as the null statistic for detecting ASE.
+
+```{r, fig.cap="*Boxplots showing mapping bias for each sample. The mean reference ratio is indicated with a black diamond.*"}
+ratios %>%
+  purrr::reduce(rbind) %>%
+  left_join(metadata[,c("sample", "genotype")]) %>%
+  dplyr::arrange(genotype, sample) %>%
+  mutate(sample = factor(sample, levels = unique(sample))) %>%
+  ggplot(aes(sample, refRatio, fill = genotype)) +
+  geom_boxplot() +
+  stat_summary(fun = mean, geom = "point", shape = 18, size = 2) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", colour = "black") +
+  labs(x = "Sample", y = "Reference allele ratio") +
+  scale_fill_discrete(name = "Genotype") +
+  scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+  theme(
+    axis.text.x = element_text(angle = -90, vjust = 0.5),
+    legend.position = "bottom"
+  )
+```
+
+```{r}
+refBias <- ratios %>%
+  purrr::reduce(rbind) %>%
+  group_by(sample) %>%
+  summarise(mean = mean(refRatio), median = median(refRatio))
+altBias <- ratios %>%
+  purrr::reduce(rbind) %>%
+  group_by(sample) %>%
+  summarise(mean = mean(altRatio), median = median(altRatio))
+```
+
+A reference mapping bias is evident across all samples.
+Mean reference ratios ranged between `r round(min(refBias$mean), 3)` and 
+`r round(max(refBias$mean), 3)`.
+Median reference ratios ranged between `r round(min(refBias$median), 3)`
+and `r round(max(refBias$median), 3)`.
+
+
+### WASP
+
+`WASP` provides a suite of tools for unbiased allele-specific read mapping.
+It does this by...
+
+The first step is to create input files containing the genetic variants (SNVs).
+Since we do not have phasing information, it is recommended to use text-based
+format opposed to HDF5 for the input files.
+The text-based input files have three space-delimited columns (position,
+ref_allele, alt_allele), and one input file per chromosome.
+The filenames must contain the name of the chromosome (e.g. chr2).
+
+```{r}
+lapply(counts, function(x){
+  chrList <- x %>%
+    dplyr::select(chromosome, position, refAllele, altAllele, sample) %>%
+    split(.[,'chromosome'])
+  lapply(chrList, function(x){
+    chr <- unique(x$chromosome)
+    sample <- unique(x$sample)
+    path <- paste0(
+      "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_wasp/snvs/",
+      sample,
+      "/chr",
+      chr,
+      ".txt"
+    )
+    if (!file.exists(path)) {
+      if (!dir.exists(dirname(path))) {
+        dir.create(dirname(path), recursive = TRUE)
+      }
+      tibble(
+        position = x$position,
+        refAllele = x$refAllele,
+        altAllele = x$altAllele
+      ) %>%
+        write_delim(file = path, delim = " ")
+    }
+  })
+})
+```
+
+The remaining 
+
+# Export

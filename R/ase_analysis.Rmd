@@ -1,0 +1,236 @@
+---
+title: "Allele Specific Expression Analysis"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Setup 
+
+```{r packages}
+library(tidyverse)
+library(magrittr)
+library(parallel)
+library(here)
+library(AnnotationHub)
+library(purrr)
+library(scales)
+library(kableExtra)
+library(statmod)
+```
+
+```{r options}
+if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores <- detectCores() - 1
+```
+
+```{r}
+source("~/bioinformatics/bioToolkit/lbFuncs.R")
+```
+
+## EnsDb
+
+```{r}
+ah <- AnnotationHub() %>%
+  subset(species == "Danio rerio") %>%
+  subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH83189"]] ## Ens101
+genes <- genes(ensDb)
+mcols(genes) <- mcols(genes)[
+  c("gene_id", "gene_name", "gene_biotype", "entrezid")
+]
+exons <- exonsBy(ensDb, by = "gene")
+```
+
+# Load data
+
+## Metadata
+
+```{r}
+metadata <- read_csv(here("files/samples.csv")) %>%
+  dplyr::select(-sample) %>%
+  dplyr::rename(sample = basename, genotype = Genotype) %>%
+  ## We need some sample aliases that follow R naming conventions otherwise
+  ## we run into errors when building upset plots
+  mutate(
+    alias = c(
+      paste0(rep("fAD", 7), seq(1, 7)),
+      paste0(rep("fAI", 8), seq(1, 8)),
+      paste0(rep("wt", 9), seq(1, 9))
+    )
+  )
+metadata %>%
+  kable(
+    align = "lllllll"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+```{r}
+fad <- metadata$alias %>%
+  str_detect("fAD")
+fai <- metadata$alias %>%
+  str_detect("fAI")
+wt <- metadata$alias %>%
+  str_detect("WT")
+```
+
+## Differential Expression
+
+```{r}
+topDE <- readRDS(here("files/toptable_raw.rds")) %>%
+  set_names(c("fAD", "fAI"))
+```
+
+## GeneiASE
+
+```{r}
+files <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_geneiASE/output",
+  full.names = TRUE
+)
+samples <- basename(files) %>%
+  str_remove(".static.pval.tsv")
+drChrs <- seq(1:25)
+```
+
+```{r}
+topASE <- lapply(files, function(x){
+  sample <- basename(x) %>%
+    str_remove(".static.pval.tsv")
+  read_tsv(x) %>%
+    mutate(
+      sig = fdr < 0.05,
+      sample = sample
+    ) %>%
+    left_join(metadata[,c("sample", "alias", "genotype")]) %>%
+    dplyr::arrange(fdr) %>%
+    mutate(ASE = fdr < 0.05)
+}) %>%
+  set_names(metadata$alias[match(samples, metadata$sample)]) %>%
+  .[metadata$alias]
+```
+
+```{r}
+nASE <- sapply(topASE, function(x){
+  dplyr::filter(x, ASE) %>%
+    nrow()
+})
+```
+
+# Enrichment testing
+
+## Fisher's exact test
+
+The first and most simple approach to testing for overall enrichment of DE genes
+showing ASE is Fisher's exact test.
+2x2 contingency tables were constructed for each mutant genotype (fAD and fAI).
+Genotype fAD showed `r nrow(dplyr::filter(topDE$fAD, DE))` DE genes in 
+comparison to WT, while genes presenting static ASE ranged from 
+`r min(nASE[fad])` to `r max(nASE[fad])` across `r length(fad)` samples.
+Genotype fAI showed `r nrow(dplyr::filter(topDE$fAI, DE))` DE genes in
+comparison to WT, while genes presenting static ASE ranged from
+`r min(nASE[fai])` to `r max(nASE[fai])` across `r length(fai)` samples.
+
+```{r}
+fisherTabs <- topASE[str_detect(names(topASE), ("fAD|fAI"))] %>%
+  lapply(function(x){
+    geno <- unique(x$alias)
+    if (str_detect(geno, "fAD")) {
+      dat <- topDE$fAD[,c("gene_id", "DE")] %>%
+        left_join(x[,c("feat", "ASE")], by = c("gene_id" = "feat")) %>%
+        mutate(
+          DE = ifelse(DE == TRUE, "DE", "Not DE"),
+          ASE = ifelse(ASE == TRUE, "ASE", "No ASE"),
+          ASE = ifelse(is.na(ASE), "No ASE", ASE)
+        )
+      tab <- table(dat$DE, dat$ASE)
+      return(tab)
+    }
+    if (str_detect(geno, "fAI")) {
+      dat <- topDE$fAI[,c("gene_id", "DE")] %>%
+        left_join(x[,c("feat", "ASE")], by = c("gene_id" = "feat")) %>%
+        mutate(
+          DE = ifelse(DE == TRUE, "DE", "Not DE"),
+          ASE = ifelse(ASE == TRUE, "ASE", "No ASE"),
+          ASE = ifelse(is.na(ASE), "No ASE", ASE)
+        )
+      tab <- table(dat$DE, dat$ASE)
+      return(tab)
+    }
+  })
+```
+
+Concerns with statistical power for Fisher's exact test were assessed due to
+the small number of DE genes for both genotypes.
+This was performed with the `power.fisher.test()` function using 1000
+simulations for each sample.
+
+```{r}
+set.seed(17)
+fisherSim <- sapply(fisherTabs, function(x){
+  p1 <- x[1,1] / (x[2,1])
+  n1 <- (x[1,1] + x[2,1])
+  p2 <- x[1,2] / (x[2,2])
+  n2 <- (x[1,2] + x[2,2])
+  power.fisher.test(p1, p2, n1, n2, alpha = 0.05, nsim = 1000)
+})
+```
+
+```{r}
+fisherSim %>%
+  enframe(name = "Sample", value = "Power") %>%
+  left_join(metadata, by = c("Sample" = "alias")) %>%
+  ggplot(aes(Sample, Power)) +
+  geom_bar(aes(fill = genotype), stat = "identity") +
+  labs(fill = "Genotype")
+```
+
+Clearly Fisher's exact test lacks power to detect enrichment of DE genes
+presenting ASE.
+The test was stil performed as an initial insight, but other methods must be
+considered to make proper conclusions.
+
+```{r}
+fisherTest <- lapply(fisherTabs, fisher.test)
+fisherP <- sapply(fisherTest, function(x){x$p.value})
+```
+
+```{r}
+fisherP %>%
+  enframe(name = "Sample", value = "p") %>%
+  left_join(metadata, by = c("Sample" = "alias")) %>%
+  ggplot(aes(Sample, -log10(p))) +
+  geom_bar(aes(fill = genotype), stat = "identity") +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  labs(fill = "Genotype")
+```
+
+## Gene Set Enrichment Analysis
+
+### Non-directional
+
