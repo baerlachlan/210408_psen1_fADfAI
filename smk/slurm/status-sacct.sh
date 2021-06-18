@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Check status of Slurm job
+## Check status of Slurm job
 
 jobid="$1"
 
@@ -11,7 +11,28 @@ then
   exit 1
 fi
 
-output=`sacct -j "$jobid" --format State --noheader | head -n 1 | awk '{print $1}'`
+## Generic retry function with up to 5 retry attempts
+## Credit to Nathan Watson-Haigh (GitHub: @nathanhaigh)
+function retry {
+  local max_attempts=5
+  local delay_sec=30
+
+  local attempt=1
+  while true; do
+    "$@" && break || {
+      if [[ ${attempt} -lt ${max_attempts} ]]; then
+        >&2 echo "WARN: Command ($@) failed attempt ${attempt} of ${max_attempts}:"
+        sleep ${delay_sec}
+      else
+        >&2 echo "ERROR: Command ($@) failed after ${attempt} attempt(s)."
+        exit 1
+      fi
+      ((attempt++))
+    }
+  done
+}
+
+output=`retry sacct -j "$jobid" --format State --noheader | head -n 1 | awk '{print $1}'`
 
 if [[ $output =~ ^(COMPLETED).* ]]
 then

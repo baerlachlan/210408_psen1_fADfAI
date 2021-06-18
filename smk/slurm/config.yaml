@@ -22,4 +22,4 @@ latency-wait: 60
 rerun-incomplete: True
 printshellcmds: True
 scheduler: greedy
-notemp: True  ## If storage quotas permit, I prefer to use --delete-temp-output after completion of a newly established workflow.
+notemp: True  ## If storage quotas permit, I prefer to hold temp files and use --delete-temp-output upon completion.
