@@ -38,6 +38,7 @@ library(purrr)
 library(scales)
 library(kableExtra)
 library(UpSetR)
+library(SeqArray)
 ```
 
 ```{r options}
@@ -64,8 +65,6 @@ mcols(genes) <- mcols(genes)[
 exons <- exonsBy(ensDb, by = "gene")
 ```
 
-# Load data
-
 ## Metadata
 
 ```{r}
@@ -91,9 +90,129 @@ fai <- metadata %>%
 wt <- metadata %>%
   dplyr::filter(genotype == "WT") %>%
   pull(sample)
+drChrs <- seq(1:25)
 ```
 
-## Counts
+# Quality control
+
+## WASP
+
+`WASP` provides a suite of tools for unbiased allele-specific read mapping.
+It does this by...
+
+Input files containing the genetic variants (SNVs) are needed to begin WASP
+filtering.
+Since we do not have phasing information, it is recommended to use text-based
+format opposed to HDF5 for the input files.
+The text-based input files have three space-delimited columns (position,
+ref_allele, alt_allele), and one input file per chromosome.
+The filenames must contain the name of the chromosome (e.g. chr2).
+
+To gather SNV information called with the `GATK` workflow, the `VCF` files were
+firstly converted into `GDS` files.
+`GDS` objects allow for easy access of the data in `R`, but are large so will
+remain on the HPC system.
+
+```{r, results='hide'}
+vcfPaths <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/09_callSnvs/selected",
+  pattern = ".vcf.gz$",
+  full.names = TRUE
+)
+lapply(vcfPaths, function(vcf){
+  gdsPath <- paste0(
+    str_remove(dirname(vcf), "selected"),
+    "gds/",
+    str_remove(basename(vcf), ".vcf.gz"),
+    ".gds"
+  )
+  if (!file.exists(gdsPath)) {
+    if (!dir.exists(dirname(gdsPath))) {
+      dir.create(dirname(gdsPath), recursive = TRUE)
+    }
+    seqVCF2GDS(vcf, gdsPath)
+  }
+})
+```
+
+```{r}
+gdsPaths <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/09_callSnvs/gds",
+  pattern = ".gds$",
+  full.names = TRUE
+)
+```
+
+```{r}
+snvList <- lapply(seq_along(gdsPaths), function(x){
+  gdsPath <- gdsPaths[x]
+  sample <- basename(gdsPath) %>%
+    str_remove(".gds")
+  gds <- seqOpen(gdsPath, readonly = FALSE)
+  snvs <- tibble(
+    variant.id = seqGetData(gds, "variant.id"),
+    chromosome = seqGetData(gds, "chromosome"),
+    position = seqGetData(gds, "position"),
+    allele = seqGetData(gds, "allele")
+  ) %>%
+    dplyr::filter(chromosome %in% drChrs) %>%
+    mutate(
+      sample = sample,
+      refAllele = str_split(allele, ",", simplify = TRUE)[,1],
+      altAllele = str_split(allele, ",", simplify = TRUE)[,2]
+      )
+  seqClose(gds)
+  return(snvs)
+})
+```
+
+```{r}
+lapply(snvList, function(x){
+  chrList <- x %>%
+    dplyr::select(chromosome, position, refAllele, altAllele, sample) %>%
+    split(.[,'chromosome'])
+  lapply(chrList, function(x){
+    chr <- unique(x$chromosome)
+    sample <- unique(x$sample)
+    path <- paste0(
+      "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_wasp/snvs/",
+      sample,
+      "/chr",
+      chr,
+      ".txt"
+    )
+    if (!file.exists(path)) {
+      if (!dir.exists(dirname(path))) {
+        dir.create(dirname(path), recursive = TRUE)
+      }
+      tibble(
+        position = x$position,
+        refAllele = x$refAllele,
+        altAllele = x$altAllele
+      ) %>%
+        write_delim(file = path, delim = " ")
+    }
+  })
+})
+```
+
+## ASEReadCounter
+
+GATK tool `ASEReadCounter` calculates allele counts at a set of positions
+after applying filters specifically tuned for AE analysis of RNA-seq data.
+The filters operate on mapping quality, base quality, depth of coverage and
+overlapping paired reads.
+Each of these filters can be controlled by command-line arguments.
+The data in this analysis was generated with the following options:
+
+* `--min-mapping-quality 10`
+* `--min-base-quality 20`
+* `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
++ Ths option counts all fragments where the base is consistent when mate pairs
+overlap.
+* `--min-depth-of-non-filtered-base -1`
++ This argument is disabled, because depth filtering was performed
+manually (see next section).
 
 Heterozygous SNVs detected by `ASEReadCounter` were recorded in separate `tsv`
 files for each sample. 
@@ -107,7 +226,6 @@ files <- list.files(
 )
 samples <- basename(files) %>%
   str_remove(".tsv")
-drChrs <- seq(1:25)
 ```
 
 ```{r}
@@ -162,26 +280,6 @@ ranged from `r comma(min(sapply(aseCounts, nrow)))` to
 #     mutate(across(c(A, C, G, T), ~ ./totalCount))
 # })
 ```
-
-# Quality control
-
-## ASEReadCounter
-
-GATK tool `ASEReadCounter` calculates allele counts at a set of positions
-after applying filters specifically tuned for AE analysis of RNA-seq data.
-The filters operate on mapping quality, base quality, depth of coverage and
-overlapping paired reads.
-Each of these filters can be controlled by command-line arguments.
-The data in this analysis was generated with the following options:
-
-* `--min-mapping-quality 10`
-* `--min-base-quality 20`
-* `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
-+ Ths option counts all fragments where the base is consistent when mate pairs
-overlap.
-* `--min-depth-of-non-filtered-base -1`
-+ This argument is disabled, because depth filtering was performed
-manually (see next section).
 
 ```{r}
 filtProps <- aseCounts %>%
@@ -455,50 +553,5 @@ Mean reference ratios ranged between `r round(min(refBias$mean), 3)` and
 `r round(max(refBias$mean), 3)`.
 Median reference ratios ranged between `r round(min(refBias$median), 3)`
 and `r round(max(refBias$median), 3)`.
-
-
-### WASP
-
-`WASP` provides a suite of tools for unbiased allele-specific read mapping.
-It does this by...
-
-The first step is to create input files containing the genetic variants (SNVs).
-Since we do not have phasing information, it is recommended to use text-based
-format opposed to HDF5 for the input files.
-The text-based input files have three space-delimited columns (position,
-ref_allele, alt_allele), and one input file per chromosome.
-The filenames must contain the name of the chromosome (e.g. chr2).
-
-```{r}
-lapply(counts, function(x){
-  chrList <- x %>%
-    dplyr::select(chromosome, position, refAllele, altAllele, sample) %>%
-    split(.[,'chromosome'])
-  lapply(chrList, function(x){
-    chr <- unique(x$chromosome)
-    sample <- unique(x$sample)
-    path <- paste0(
-      "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_wasp/snvs/",
-      sample,
-      "/chr",
-      chr,
-      ".txt"
-    )
-    if (!file.exists(path)) {
-      if (!dir.exists(dirname(path))) {
-        dir.create(dirname(path), recursive = TRUE)
-      }
-      tibble(
-        position = x$position,
-        refAllele = x$refAllele,
-        altAllele = x$altAllele
-      ) %>%
-        write_delim(file = path, delim = " ")
-    }
-  })
-})
-```
-
-The remaining 
 
 # Export
