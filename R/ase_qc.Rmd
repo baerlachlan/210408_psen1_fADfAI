@@ -106,7 +106,8 @@ Since we do not have phasing information, it is recommended to use text-based
 format opposed to HDF5 for the input files.
 The text-based input files have three space-delimited columns (position,
 ref_allele, alt_allele), and one input file per chromosome.
-The filenames must contain the name of the chromosome (e.g. chr2).
+The filenames must be named <#>.snps.txt.gz (e.g 
+1.snps.txt.gz for chromosome 1).
 
 To gather SNV information called with the `GATK` workflow, the `VCF` files were
 firstly converted into `GDS` files.
@@ -155,7 +156,10 @@ snvList <- lapply(seq_along(gdsPaths), function(x){
     position = seqGetData(gds, "position"),
     allele = seqGetData(gds, "allele")
   ) %>%
-    dplyr::filter(chromosome %in% drChrs) %>%
+    dplyr::filter(
+      chromosome %in% drChrs,
+      str_detect(allele, "\\*", negate = TRUE) ## Remove deletions
+      ) %>%
     mutate(
       sample = sample,
       refAllele = str_split(allele, ",", simplify = TRUE)[,1],
@@ -177,9 +181,9 @@ lapply(snvList, function(x){
     path <- paste0(
       "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_wasp/snvs/",
       sample,
-      "/chr",
+      "/",
       chr,
-      ".txt"
+      ".snps.txt.gz"
     )
     if (!file.exists(path)) {
       if (!dir.exists(dirname(path))) {
@@ -190,7 +194,7 @@ lapply(snvList, function(x){
         refAllele = x$refAllele,
         altAllele = x$altAllele
       ) %>%
-        write_delim(file = path, delim = " ")
+        write_delim(file = path, delim = " ", col_names = FALSE)
     }
   })
 })

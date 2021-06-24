@@ -36,3 +36,4 @@ slurm/*
 14_aseReadCounts/*
 refs/*
 smk/log/*
+files/fgsea*.Rds
