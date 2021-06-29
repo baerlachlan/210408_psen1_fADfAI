@@ -1,7 +1,7 @@
 rule trim:
 	input:
-		R1 = "01_addUmiHeader/fastq/{SAMPLE}_R1.fastq.gz",
-		R2 = "01_addUmiHeader/fastq/{SAMPLE}_R2.fastq.gz"
+		R1 = "01_addUmi/fastq/{SAMPLE}_R1.fastq.gz",
+		R2 = "01_addUmi/fastq/{SAMPLE}_R2.fastq.gz"
 	output:
 		R1 = temp("02_trim/fastq/{SAMPLE}_R1.fastq.gz"),
 		R2 = temp("02_trim/fastq/{SAMPLE}_R2.fastq.gz"),

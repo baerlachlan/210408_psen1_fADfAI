@@ -37,3 +37,8 @@ slurm/*
 refs/*
 smk/log/*
 files/fgsea*.Rds
+01_addUmi/log/*
+02_trim/log/*
+03_align/log/*
+04_dedupUmis/log/*
+

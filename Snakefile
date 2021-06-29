@@ -35,15 +35,16 @@ READ_LEN = 100
 rule all:
 	input:
 		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("02_trimmedData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("03_alignedData/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		"03_alignedData/featureCounts/genes.out",
+		expand("02_trim/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
+		expand("03_align/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		"03_align/featureCounts/genes.out",
 		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		expand("09_callSnvs/selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES)
+		expand("09_callSnvs/selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
+		expand("10_wasp/merge/{SAMPLE}.keep.merge.sort.bam", SAMPLE = SAMPLES[12:24])
 
 include: "smk/modules/refs.smk"
 include: "smk/modules/fastqc_raw.smk"
-include: "smk/modules/addUmiHeader.smk"
+include: "smk/modules/addUmi.smk"
 include: "smk/modules/trim.smk"
 include: "smk/modules/fastqc_trim.smk"
 include: "smk/modules/align.smk"
@@ -57,5 +58,5 @@ include: "smk/modules/knownSnvs.smk"
 include: "smk/modules/recalBases.smk"
 include: "smk/modules/callSnvs.smk"
 include: "smk/modules/wasp.smk"
-include: "smk/modules/countAse.smk"
+include: "smk/modules/aseReadCounter.smk"
 include: "smk/modules/geneiase.smk"
