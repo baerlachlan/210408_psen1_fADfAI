@@ -48,7 +48,7 @@ cores <- detectCores() - 1
 ```
 
 ```{r}
-source("~/bioinformatics/bioToolkit/lbFuncs.R")
+source(here("R/lbFuncs.R"))
 ```
 
 ## EnsDb
@@ -73,8 +73,7 @@ exons <- exonsBy(ensDb, by = "gene")
 metadata <- read_csv(here("files/samples.csv")) %>%
   dplyr::select(-sample) %>%
   dplyr::rename(sample = basename, genotype = Genotype) %>%
-  ## We need some sample aliases that follow R naming conventions otherwise
-  ## we run into errors when building upset plots
+  ## We need some sample aliases that follow R naming conventions
   mutate(
     alias = c(
       paste0(rep("fAD", 7), seq(1, 7)),
@@ -147,15 +146,10 @@ nASE <- sapply(topASE, function(x){
 
 ## Fisher's exact test
 
-The first and most simple approach to testing for overall enrichment of DE genes
-showing ASE is Fisher's exact test.
+The first and most simple approach to testing for overall enrichment of DE genes showing ASE is Fisher's exact test.
 2x2 contingency tables were constructed for each mutant genotype (fAD and fAI).
-Genotype fAD showed `r nrow(dplyr::filter(topDE$fAD, DE))` DE genes in 
-comparison to WT, while genes presenting static ASE ranged from 
-`r min(nASE[fad])` to `r max(nASE[fad])` across `r length(fad)` samples.
-Genotype fAI showed `r nrow(dplyr::filter(topDE$fAI, DE))` DE genes in
-comparison to WT, while genes presenting static ASE ranged from
-`r min(nASE[fai])` to `r max(nASE[fai])` across `r length(fai)` samples.
+Genotype fAD showed `r nrow(dplyr::filter(topDE$fAD, DE))` DE genes in comparison to WT, while genes presenting static ASE ranged from `r min(nASE[fad])` to `r max(nASE[fad])` across `r length(fad)` samples.
+Genotype fAI showed `r nrow(dplyr::filter(topDE$fAI, DE))` DE genes in comparison to WT, while genes presenting static ASE ranged from `r min(nASE[fai])` to `r max(nASE[fai])` across `r length(fai)` samples.
 
 ```{r}
 fisherTabs <- topASE[str_detect(names(topASE), ("fAD|fAI"))] %>%
@@ -186,10 +180,8 @@ fisherTabs <- topASE[str_detect(names(topASE), ("fAD|fAI"))] %>%
   })
 ```
 
-Concerns with statistical power for Fisher's exact test were assessed due to
-the small number of DE genes for both genotypes.
-This was performed with the `power.fisher.test()` function using 1000
-simulations for each sample.
+Concerns with statistical power for Fisher's exact test were assessed due to the small number of DE genes for both genotypes.
+This was performed with the `power.fisher.test()` function using 1000 simulations for each sample.
 
 ```{r}
 set.seed(17)
@@ -212,8 +204,7 @@ fisherSim %>%
 ```
 
 Fisher's exact test lacks power to detect enrichment of DE genes presenting ASE.
-The test was stil performed as an initial insight, but other methods must be
-considered to make proper conclusions.
+The test was stil performed as an initial insight, but other methods must be considered to make proper conclusions.
 
 ```{r}
 fisherTest <- lapply(fisherTabs, fisher.test)
@@ -431,26 +422,32 @@ permRanks_d <- function(topASE){
 }
 ```
 
+```{r, eval=FALSE}
+## This code chunk has a lengthy runtime and by default will not execute
+## Instead object is saved as Rds and reloaded when needed
+if (!interactive()) {
+  set.seed(17)
+  ranks_d <- replicate(
+    n = 200,
+    expr = lapply(topASE[str_detect(names(topASE), "(fAD|fAI)")], permRanks_d)
+  ) %>%
+    t() %>%
+    as_tibble()
+  ## 3643.382 sec elapsed
+  set.seed(17)
+  fgsea_d <- lapply(as.list(ranks_d), function(x){
+    x %>%
+      lapply(function(y){
+        fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+      })
+  }) %>%
+    set_names(colnames(ranks_d))
+  ## 2343.242 sec elapsed
+  saveRDS(fgsea_d, here("files/fgsea_d.Rds"))
+}
+```
+
 ```{r}
-set.seed(17)
-tic()
-ranks_d <- replicate(
-  n = 200,
-  expr = lapply(topASE[str_detect(names(topASE), "(fAD|fAI)")], permRanks_d)
-) %>%
-  t() %>%
-  as_tibble()
-toc()
-set.seed(17)
-tic()
-fgsea_d <- lapply(as.list(ranks_d), function(x){
-  x %>%
-    lapply(function(y){
-      fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-    })
-}) %>%
-  set_names(colnames(ranks_d))
-toc()
-saveRDS(fgsea_d, here("files/fgsea_d.Rds"))
+fgsea_d <- readRDS(here("files/fgsea_d.Rds"))
 ```
 
