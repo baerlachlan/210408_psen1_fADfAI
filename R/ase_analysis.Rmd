@@ -110,7 +110,7 @@ topDE <- readRDS(here("files/toptable_raw.rds")) %>%
 
 ```{r}
 files <- list.files(
-  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_geneiASE/output",
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/12_geneiase/ase",
   full.names = TRUE
 )
 samples <- basename(files) %>%
@@ -281,10 +281,10 @@ permRanks_nd <- function(topASE){
 }
 ```
 
-```{r, eval=FALSE}
-## This code chunk has a lengthy runtime and by default will not execute
+```{r}
+## This code chunk has a lengthy run-time and will not execute if file already exists
 ## Instead object is saved as Rds and reloaded when needed
-if (!interactive()) {
+if (!file.exists(here("files/fgsea_nd.Rds"))) {
   set.seed(17)
   ranks_nd <- replicate(
     n = 200,
@@ -422,10 +422,10 @@ permRanks_d <- function(topASE){
 }
 ```
 
-```{r, eval=FALSE}
-## This code chunk has a lengthy runtime and by default will not execute
+```{r}
+## This code chunk has a lengthy run-time and will not execute if file already exists
 ## Instead object is saved as Rds and reloaded when needed
-if (!interactive()) {
+if (!file.exists(here("files/fgsea_d.Rds"))) {
   set.seed(17)
   ranks_d <- replicate(
     n = 200,
@@ -451,3 +451,52 @@ if (!interactive()) {
 fgsea_d <- readRDS(here("files/fgsea_d.Rds"))
 ```
 
+```{r}
+pvals_d <- lapply(fgsea_d, function(x){
+  lapply(seq_along(x), function(y){
+    x[[y]][,c("pathway", "padj")] %>%
+      dplyr::rename(!!as.character(y) := padj)
+  }) %>%
+    purrr::reduce(left_join) %>%
+    column_to_rownames("pathway") %>%
+    t() %>%
+    as_tibble()
+})
+```
+
+```{r}
+mean_d <- lapply(pvals_d, function(sample){
+  chrList <- as.list(sample)
+  lapply(seq_along(chrList), function(x){
+    chr <- names(chrList)[x]
+    wilsonConf(chrList[[x]]) %>%
+      mutate(chromosome = as.factor(chr))
+  }) %>%
+    purrr::reduce(rbind) %>%
+    dplyr::select(chromosome, everything())
+}) 
+```
+
+```{r}
+lapply(seq_along(mean_d), function(ind){
+  x <- mean_d[[ind]]
+  x %>%
+    mutate(
+      sample = names(mean_d)[ind],
+      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
+    )
+}) %>%
+  purrr::reduce(rbind) %>%
+  left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
+  ggplot(aes(sample, -log10(mean))) +
+  geom_bar(stat = "identity", aes(fill = genotype)) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  facet_wrap(~ chromosome) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank(),
+    legend.position = "bottom"
+  ) +
+  labs(y = "-log10(p)")
+```
