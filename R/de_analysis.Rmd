@@ -40,7 +40,10 @@ library(kableExtra)
 library(edgeR)
 library(ggrepel)
 library(fgsea)
+library(RColorBrewer)
 library(pheatmap)
+library(cqn)
+library(ggpubr)
 ```
 
 ```{r options}
@@ -94,11 +97,14 @@ mcols(genes) <- mcols(genes)[
   left_join(geneGc)
 ```
 
+An `EnsDb` object was obtained for Ensembl release 101 with the `AnnotationHub` package.
+This contained the information required to set up gene and transcript annotations.
+Gene-level estimates of GC content and length estimates were also generated which are required for assessing potential biases in downstream analysis.
+
 ## Count data
 
 ```{r}
-# counts <- read_tsv(here("03_align/featureCounts/genes.out")) %>%
-counts <- read_tsv(here("/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/03_align/featureCounts/genes.out")) %>%
+counts <- read_tsv(here("03_align/featureCounts/genes.out")) %>%
   set_colnames(basename(colnames(.))) %>%
   set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam"))
 ```
@@ -113,17 +119,31 @@ metadata <- read_csv(here("files/samples.csv")) %>%
       paste0(rep("fAD", 7), seq(1, 7)),
       paste0(rep("fAI", 8), seq(1, 8)),
       paste0(rep("wt", 9), seq(1, 9))
-    )
+    ),
+    group = genotype
   )
 metadata$genotype <- fct_relevel(
   metadata$genotype,
   c("WT", "EOfAD-like/+", "fAI-like/+")
 )
+genoCols <- metadata$genotype %>%
+  levels() %>%
+  length() %>%
+  brewer.pal("Set1") %>%
+  setNames(levels(metadata$genotype))
 ```
 
 ```{r}
-minCPM <- 1.5
-minSamples <- 7
+minLib <- counts %>%
+  dplyr::select(., str_subset(colnames(.), "KB")) %>%
+  colSums() %>%
+  min()
+minCPM <- as.vector(cpm(10, lib.size = minLib))
+minSamples <- metadata %>%
+  split(.$genotype) %>%
+  lapply(nrow) %>%
+  unlist() %>%
+  min()
 dgeList <- counts %>%
   as.data.frame() %>%
   column_to_rownames("Geneid") %>%
@@ -139,8 +159,10 @@ dgeList <- counts %>%
 ```
 
 Gene-level count data was loaded from `featureCounts` and imported into `R` as a `DGEList` object.
-Genes were removed from the counts matrix if they had at least `r minCPM` CPM in more than `r ncol(dgeList) - minSamples` samples.
-`r nrow(dgeList)` genes remained for further analysis with library sizes ranging between `r comma(min(dgeList$samples$lib.size))` and `r comma(max(dgeList$samples$lib.size))`.
+Genes were removed from the counts matrix if they had less than `r round(minCPM, digits = 2)` CPM (~10 reads) in more than `r ncol(dgeList) - minSamples` samples.
+This meant that each remaining gene must have assigned reads detected in at least one genotype group.
+
+`r nrow(dgeList)` genes remained for further analysis with library sizes ranging from `r comma(min(dgeList$samples$lib.size))` to `r comma(max(dgeList$samples$lib.size))`.
 
 ```{r, fig.cap="*Expression density plots for all samples after filtering*"}
 cpm(dgeList, log = TRUE) %>%
@@ -153,6 +175,7 @@ cpm(dgeList, log = TRUE) %>%
   left_join(metadata) %>%
   ggplot(aes(logCPM, colour = genotype, group = sample)) +
   geom_density() +
+  scale_colour_manual(values = genoCols) +
   labs(
     x = "logCPM",
     y = "Density",
@@ -160,7 +183,7 @@ cpm(dgeList, log = TRUE) %>%
   )
 ```
 
-# DE Analysis
+# Initial DE analysis
 
 ## PCA
 
@@ -183,6 +206,7 @@ pca$x %>%
   geom_text_repel(show.legend = FALSE) +
   stat_ellipse(geom = "polygon", alpha = 0.05, show.legend = FALSE) +
   guides(fill = FALSE) +
+  scale_colour_manual(values = genoCols) +
   labs(
     x = paste0("PC1 (", pcaVars[["PC1"]], ")"),
     y = paste0("PC2 (", pcaVars[["PC2"]], ")"),
@@ -191,7 +215,7 @@ pca$x %>%
 ```
 
 A Principal Component Analysis (PCA) was performed using the sample logCPM values.
-There is no clustering of genotypes, which may be due to the subtlty of the mutations and early time point (6 months).
+It appears there is no clustering of genotypes, which may be due to the subtlty of the mutations and early time point (6 months).
 Additionally, PC1 only accounts for `r pcaVars[["PC1"]]` of the variance.
 
 ## Design
@@ -211,11 +235,18 @@ pheatmap(
   cluster_rows = FALSE, 
   color = c("white", "grey50"),
   annotation_row = dgeList$samples["genotype"],
+  annotation_colors = list(genotype = genoCols),
+  angle_col = "315",
   legend = FALSE
 )
 ```
 
 ## Model fitting
+
+Genewise negative binomial generalized linear models were using the `glmFit()` function of the `edgeR` package.
+Likelihood ratio tests were then performed for the coefficients in the model with `glmLRT()`.
+Here the null hypothesis, $H_0$, is testing that the true values of the coefficients are equal to 0.
+Due to the subtle effects of the mutation outlined in the PCA, genes were considered to be DE if they had an FDR-adjusted p-value < 0.05, as opposed to more stringent error rate control methods such as Bonferroni.
 
 ```{r}
 alpha <- 0.05
@@ -235,18 +266,84 @@ topTables <- colnames(design)[2:3] %>%
       mutate(
         coef = x,
         bonfP = p.adjust(PValue, "bonf"),
-        DE = case_when(
-          bonfP < alpha ~ TRUE,
-          FDR < alpha & abs(logFC) > minLfc ~ TRUE
-        ),
-        DE = ifelse(is.na(DE), FALSE, DE)
+        DE = ifelse(FDR < 0.05, TRUE, FALSE)
       )
   }, simplify = FALSE)
 ```
 
-## Bias checks
+With this criteria, the following genes were classified as DE:
 
 ```{r}
+topTables$`EOfAD-like/+` %>%
+  dplyr::filter(DE) %>% 
+  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    PValue = formatC(PValue, digits = 2, format = "e"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "differentially expressed genes for EOfAD genotype",
+      "in comparison to wildtype"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+topTables$`fAI-like/+` %>%
+  dplyr::filter(DE) %>% 
+  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    PValue = formatC(PValue, digits = 2, format = "e"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "differentially expressed genes for fAI genotype",
+      "in comparison to wildtype"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+```{r}
+deCols <- c(`TRUE` = "red", `FALSE` = "grey50")
+```
+
+## Bias checks
+
+### MA plots
+
+```{r, fig.cap="*MA plots checking for logFC artefacts across the range of expression values. The average logFC appears consistant across all expression values for both comparisons*"}
+topTables %>%
+  bind_rows() %>%
+  arrange(DE) %>%
+  ggplot(aes(logCPM, logFC)) +
+  geom_point(aes(colour = DE), alpha = 0.4) +
+  geom_text_repel(
+    aes(label = gene_name, colour = DE),
+    data = . %>% dplyr::filter(DE)
+  ) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~coef, nrow = 2) +
+  scale_y_continuous(breaks = seq(-8, 8, by = 2)) +
+  scale_colour_manual(values = deCols) +
+  theme(legend.position = "none")
+```
+
+### GC content
+
+```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Some bias was observed for both comparisons, in particular for the fAI genotype, and may be of concern for this dataset.*"}
 topTables %>%
   bind_rows() %>%
   mutate(stat = -sign(logFC)*log10(PValue)) %>%
@@ -254,12 +351,230 @@ topTables %>%
   geom_point(aes(colour = DE), alpha = 0.4) +
   geom_smooth(se = FALSE) +
   facet_wrap(~coef)  +
+  geom_text_repel(
+    aes(label = gene_name, colour = DE),
+    data = . %>% dplyr::filter(DE)
+  ) +
+  labs(
+    x = " Gene GC content (%)",
+    y = "Ranking Statistic"
+  ) +
+  coord_cartesian(ylim = c(-10, 10)) +
+  scale_colour_manual(values = deCols) +
+  theme(legend.position = "none")
+```
+
+### Gene length
+
+```{r, fig.cap="*Gene length bias for differential expression. Gene length is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. No bias is observed for either comparison.*"}
+topTables %>%
+  bind_rows() %>%
+  mutate(stat = -sign(logFC)*log10(PValue)) %>%
+  ggplot(aes(length, stat)) +
+  geom_point(aes(colour = DE), alpha = 0.4) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~coef)  +
+  geom_text_repel(
+    aes(label = gene_name, colour = DE),
+    data = . %>% dplyr::filter(DE)
+  ) +
   labs(
     x = "GC content (%)",
     y = "Ranking Statistic"
   ) +
   coord_cartesian(ylim = c(-10, 10)) +
-  # scale_colour_manual(values = deCols) +
+  scale_x_log10(labels = comma) +
+  scale_colour_manual(values = deCols) +
   theme(legend.position = "none")
+```
+
+# Conditional Quantile Normalisation
+
+Conditional Quantile Normalisation (CQN) is a procedure that can account for GC content and length biases in differential expression and is implemented with package `cqn`.
+It does this by making by calculating offset values that can be incorporated into the GLM.
+As GC content was noted as being of concern, but length showed no bias, only GC content was used to calculate the offsets.
+The `glm.offset` values from the output of `cqn` were added to the original `DGEList` object.
+
+```{r}
+cqn <- cqn(
+  counts = dgeList$counts,
+  x = dgeList$genes$gc_content,
+  lengths = rep(1000, times = nrow(dgeList)),
+  sizeFactors = dgeList$samples$lib.size,
+  lengthMethod = "fixed"
+)
+```
+
+```{r, fig.width=6}
+cqnplot(cqn, n = 1, xlab = "GC Content", col = genoCols)
+legend(
+  "bottomright",
+  legend = levels(metadata$genotype),
+  col = genoCols,
+  lty = 1
+)
+```
+
+```{r}
+dgeList$offset <- cqn$glm.offset
+```
+
+## PCA
+
+```{r}
+cpm_cqn <- cqn %>%
+  with(y + offset)
+```
+
+```{r}
+pca_cqn <- cpm_cqn %>%
+  t() %>%
+  prcomp() 
+pcaVars <- percent_format(0.1)(summary(pca_cqn)$importance["Proportion of Variance",])
+```
+
+```{r, fig.cap="*Principal Component Analysis of gene-level counts post CQN.*"}
+pca_cqn$x %>%
+  as.data.frame() %>%
+  rownames_to_column("sample") %>%
+  left_join(metadata) %>%
+  as_tibble() %>%
+  ggplot(aes(PC1, PC2, colour = genotype, fill = genotype, label = alias)) +
+  geom_point(size = 2) +
+  geom_text_repel(show.legend = FALSE) +
+  stat_ellipse(geom = "polygon", alpha = 0.05, show.legend = FALSE) +
+  guides(fill = FALSE) +
+  scale_colour_manual(values = genoCols) +
+  labs(
+    x = paste0("PC1 (", pcaVars[["PC1"]], ")"),
+    y = paste0("PC2 (", pcaVars[["PC2"]], ")"),
+    colour = "Genotype"
+  )
+```
+
+There was very little improvement in separation of genotype groups after CQN, and PC1 still only accounted for `r pcaVars[["PC1"]]` of the variation.
+The x-axis of the PCA plot appears to be flipped, but this normal as the signs of PC values are somewhat arbitrary.
+
+## Model fitting
+
+After incorporation of the offset values into the `DGEList` object, dispersion estimates were calculated and models were fitted as done pre CQN.
+
+```{r}
+fit_cqn <- estimateDisp(dgeList, design) %>%
+  glmFit()
+topTables_cqn <- colnames(design)[2:3] %>%
+  sapply(function(x){
+    glmLRT(fit_cqn, coef = x) %>%
+      topTags(n = Inf) %>%
+      .[["table"]] %>%
+      as_tibble() %>%
+      arrange(PValue) %>%
+      dplyr::select(
+        gene_id, gene_name, logFC, logCPM, PValue, FDR, everything()  
+      ) %>%
+      mutate(
+        coef = x,
+        bonfP = p.adjust(PValue, "bonf"),
+        DE = ifelse(FDR < 0.05, TRUE, FALSE)
+      )
+  }, simplify = FALSE)
+```
+
+```{r}
+topTables_cqn$`EOfAD-like/+` %>%
+  dplyr::filter(DE) %>% 
+  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    PValue = formatC(PValue, digits = 2, format = "e"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "differentially expressed genes for EOfAD genotype",
+      "in comparison to wildtype after CQN"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+topTables_cqn$`fAI-like/+` %>%
+  dplyr::filter(DE) %>% 
+  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    PValue = formatC(PValue, digits = 2, format = "e"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "differentially expressed genes for fAI genotype",
+      "in comparison to wildtype after CQN"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+## Bias checks
+
+### MA plots
+
+```{r, fig.cap="*MA plots checking for logFC artefacts across the range of expression values. The average logFC remains consistant across all expression values for both comparisons after CQN*"}
+topTables_cqn %>%
+  bind_rows() %>%
+  arrange(DE) %>%
+  ggplot(aes(logCPM, logFC)) +
+  geom_point(aes(colour = DE), alpha = 0.4) +
+  geom_text_repel(
+    aes(label = gene_name, colour = DE),
+    data = . %>% dplyr::filter(DE)
+  ) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~coef, nrow = 2) +
+  scale_y_continuous(breaks = seq(-8, 8, by = 2)) +
+  scale_colour_manual(values = deCols) +
+  theme(legend.position = "none")
+```
+
+### GC content
+
+```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. There was still a small amount of residual bias post CQN, but an improvement was noted, particulary for the fAI genotype.*"}
+topTables_cqn %>%
+  bind_rows() %>%
+  mutate(stat = -sign(logFC)*log10(PValue)) %>%
+  ggplot(aes(gc_content, stat)) +
+  geom_point(aes(colour = DE), alpha = 0.4) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~coef)  +
+  geom_text_repel(
+    aes(label = gene_name, colour = DE),
+    data = . %>% dplyr::filter(DE)
+  ) +
+  labs(
+    x = "Gene GC content (%)",
+    y = "Ranking Statistic"
+  ) +
+  coord_cartesian(ylim = c(-10, 10)) +
+  scale_colour_manual(values = deCols) +
+  theme(legend.position = "none")
+```
+
+# Results
+
+## Export data
+
+Final results were exported as Rds files for further analysis.
+
+```{r}
+saveRDS(topTables, here("files/topTables.Rds"))
+saveRDS(topTables_cqn, here("files/topTables_cqn.Rds"))
 ```
 
