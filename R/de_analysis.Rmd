@@ -569,6 +569,75 @@ topTables_cqn %>%
 
 # Results
 
+## DE genes
+
+```{r}
+geneLabeller <- as_labeller(
+  structure(dgeList$genes$gene_name, names = dgeList$genes$gene_id)
+)
+```
+
+```{r}
+fadComp <- metadata %>%
+  dplyr::filter(str_detect(alias, "(fAD|wt)")) %>%
+  pull(sample)
+faiComp <- metadata %>%
+  dplyr::filter(str_detect(alias, "(fAI|wt)")) %>%
+  pull(sample)
+```
+
+```{r}
+deGenes <- lapply(topTables_cqn, function(x){
+  dplyr::filter(x, DE) %>%
+    pull(gene_id)
+})
+deCpmPlots <- lapply(seq_along(deGenes), function(x){
+  cpms <- cpm_cqn[deGenes[[x]],] %>% 
+    as.data.frame() %>% 
+    rownames_to_column("gene_id") %>% 
+    gather(key = "sample", value = logCPM, -gene_id) %>% 
+    as_tibble() %>%
+    left_join(metadata[,c("sample", "genotype")])
+  if (names(deGenes[x]) == "EOfAD-like/+") {
+    dplyr::filter(cpms, sample %in% fadComp) %>%
+      ggplot(aes(genotype, logCPM)) +
+      geom_boxplot(aes(fill = genotype)) +
+      labs(title = paste(names(deGenes[x]), "DE genes")) +
+      facet_wrap(
+        ~gene_id,
+        labeller = geneLabeller,
+        nrow = 2
+      ) +
+      theme(
+        legend.position = "none",
+        title = element_text(face = "bold")
+      )
+  } else if (names(deGenes[x]) == "fAI-like/+") {
+    dplyr::filter(cpms, sample %in% faiComp) %>%
+      ggplot(aes(genotype, logCPM)) +
+      geom_boxplot(aes(fill = genotype)) +
+      labs(title = paste(names(deGenes[x]), "DE genes")) +
+      facet_wrap(
+        ~gene_id,
+        labeller = geneLabeller,
+        nrow = 4
+      ) +
+      theme(
+        legend.position = "none",
+        title = element_text(face = "bold")
+      )
+  }
+})
+```
+
+```{r, fig.height=4}
+deCpmPlots[[1]]
+```
+
+```{r, fig.height=8}
+deCpmPlots[[2]]
+```
+
 ## Export data
 
 Final results were exported as Rds files for further analysis.
