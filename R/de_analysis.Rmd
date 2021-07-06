@@ -44,6 +44,9 @@ library(RColorBrewer)
 library(pheatmap)
 library(cqn)
 library(ggpubr)
+library(DT)
+library(htmltools)
+library(pander)
 ```
 
 ```{r options}
@@ -99,15 +102,9 @@ mcols(genes) <- mcols(genes)[
 
 An `EnsDb` object was obtained for Ensembl release 101 with the `AnnotationHub` package.
 This contained the information required to set up gene and transcript annotations.
-Gene-level estimates of GC content and length estimates were also generated which are required for assessing potential biases in downstream analysis.
+Gene-level estimates of GC content and length were also generated which are required for assessing potential biases in downstream analysis.
 
 ## Count data
-
-```{r}
-counts <- read_tsv(here("03_align/featureCounts/genes.out")) %>%
-  set_colnames(basename(colnames(.))) %>%
-  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam"))
-```
 
 ```{r}
 metadata <- read_csv(here("files/samples.csv")) %>%
@@ -131,6 +128,12 @@ genoCols <- metadata$genotype %>%
   length() %>%
   brewer.pal("Set1") %>%
   setNames(levels(metadata$genotype))
+```
+
+```{r}
+counts <- read_tsv(here("03_align/featureCounts/genes.out")) %>%
+  set_colnames(basename(colnames(.))) %>%
+  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam"))
 ```
 
 ```{r}
@@ -246,7 +249,7 @@ pheatmap(
 Genewise negative binomial generalized linear models were using the `glmFit()` function of the `edgeR` package.
 Likelihood ratio tests were then performed for the coefficients in the model with `glmLRT()`.
 Here the null hypothesis, $H_0$, is testing that the true values of the coefficients are equal to 0.
-Due to the subtle effects of the mutation outlined in the PCA, genes were considered to be DE if they had an FDR-adjusted p-value < 0.05, as opposed to more stringent error rate control methods such as Bonferroni.
+Due to the subtle effects of the mutation outlined in the PCA, genes were considered to be DE if they had an FDR-adjusted p-value < 0.05, as opposed to more stringent error rate controls such as the Bonferroni method.
 
 ```{r}
 alpha <- 0.05
@@ -343,7 +346,7 @@ topTables %>%
 
 ### GC content
 
-```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Some bias was observed for both comparisons, in particular for the fAI genotype, and may be of concern for this dataset.*"}
+```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Some bias was observed for both comparisons. In particular, the fAI genotype shows a well-documented pattern of GC bias, whereby both low and high GC proportions are affected. This may be of concern for this dataset.*"}
 topTables %>%
   bind_rows() %>%
   mutate(stat = -sign(logFC)*log10(PValue)) %>%
@@ -379,7 +382,7 @@ topTables %>%
     data = . %>% dplyr::filter(DE)
   ) +
   labs(
-    x = "GC content (%)",
+    x = "GC length",
     y = "Ranking Statistic"
   ) +
   coord_cartesian(ylim = c(-10, 10)) +
@@ -405,7 +408,7 @@ cqn <- cqn(
 )
 ```
 
-```{r, fig.width=6}
+```{r, fig.width=6, fig.cap="*Model fits for GC content under the CQN model. *"}
 cqnplot(cqn, n = 1, xlab = "GC Content", col = genoCols)
 legend(
   "bottomright",
@@ -569,7 +572,28 @@ topTables_cqn %>%
 
 # Results
 
-## DE genes
+```{r, fig.cap="*Volcano plots showing -log10(p) against logFC. Genes determined to be DE are coloured red.*"}
+topTables_cqn %>%
+  bind_rows() %>%
+  ggplot(aes(logFC, -log10(PValue), colour = DE)) +
+  geom_point(alpha = 0.4) +
+  geom_text_repel(
+    aes(label = gene_name),
+    size = 3,
+    data = . %>% dplyr::filter(DE)
+  ) +
+  geom_text_repel(
+    aes(label = gene_name),
+    size = 3,
+    data = . %>% dplyr::filter(!DE, logFC < -3)
+  ) +
+  facet_wrap(~coef, nrow = 1) +
+  scale_colour_manual(values = deCols) +
+  scale_x_continuous(breaks = seq(-8, 8, by = 2)) +
+  coord_cartesian(ylim = c(0, 10)) +
+  labs(y = log10plab) +
+  theme(legend.position = "none") 
+```
 
 ```{r}
 geneLabeller <- as_labeller(
@@ -630,20 +654,112 @@ deCpmPlots <- lapply(seq_along(deGenes), function(x){
 })
 ```
 
-```{r, fig.height=4}
+## EOfAD-like mutation
+
+A set of `r length(deGenes[[1]])` were classified as DE due to the EOfAD-like/+ genotype.
+The highest ranked genes by p-value are shown in the following table.
+Interestingly, `r nrow(dplyr::filter(topTables_cqn[[1]], DE, chromosome == 17))` of these genes were located on chromosome 17, the same chromosome as the mutation.
+
+```{r}
+topTables_cqn$`EOfAD-like/+` %>%
+  dplyr::slice(1:1000) %>%
+  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    PValue = formatC(PValue, digits = 2, format = "e"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  datatable(
+    caption = htmltools::tags$caption(htmltools::em(paste0(
+      "EOfAD-like/+ genotype: The top 1000 genes ranked by p-value from ",
+      "differential expression testing."
+    ))),
+    filter = "top"
+  )
+```
+
+```{r, fig.cap="*Heatmap of DE genes in the comparison between EOfAD-like/+ and WT genotypes. Values a logCPM after CQN.*"}
+cpm_cqn[deGenes$`EOfAD-like/+`,] %>%
+  as.data.frame() %>%
+  dplyr::select(all_of(fadComp)) %>%
+  set_rownames(idToSym(rownames(.), genes)) %>%
+  pheatmap::pheatmap(
+    color = viridis_pal(option = "magma")(100),
+    legend_breaks = c(seq(-2, 8, by = 2), max(.)),
+    legend_labels = c(seq(-2, 8, by = 2), "logCPM\n"),
+    annotation_col = dgeList$samples %>%
+      dplyr::select(Genotype = genotype),
+    annotation_names_col = FALSE,
+    annotation_colors = list(Genotype = genoCols),
+    cutree_rows = 3,
+    angle_col = "315"
+  )
+```
+
+```{r, fig.height=4, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
 deCpmPlots[[1]]
 ```
 
-```{r, fig.height=8}
+## fAI-like mutation
+
+A set of `r length(deGenes[[2]])` were classified as DE due to the fAI-like/+ genotype.
+The highest ranked genes by p-value are shown in the following table.
+The location of DE genes followed a similar trend to the Alzheimer's mutant with `r nrow(dplyr::filter(topTables_cqn[[2]], DE, chromosome == 17))` genes located on chromosome 17.
+
+```{r}
+topTables_cqn$`fAI-like/+` %>%
+  dplyr::slice(1:1000) %>%
+  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    PValue = formatC(PValue, digits = 2, format = "e"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  datatable(
+    caption = htmltools::tags$caption(htmltools::em(paste0(
+      "fAI-like/+ genotype: The top 1000 genes ranked by p-value from ",
+      "differential expression testing."
+    ))),
+    filter = "top"
+  )
+```
+
+```{r, fig.cap="*Heatmap of DE genes in the comparison between fAI-like/+ and WT genotypes. Values a logCPM after CQN.*"}
+cpm_cqn[deGenes$`fAI-like/+`,] %>%
+  as.data.frame() %>%
+  dplyr::select(all_of(faiComp)) %>%
+  set_rownames(idToSym(rownames(.), genes)) %>%
+  pheatmap::pheatmap(
+    color = viridis_pal(option = "magma")(100),
+    legend_breaks = c(seq(-2, 8, by = 2), max(.)),
+    legend_labels = c(seq(-2, 8, by = 2), "logCPM\n"),
+    annotation_col = dgeList$samples %>%
+      dplyr::select(Genotype = genotype),
+    annotation_names_col = FALSE,
+    annotation_colors = list(Genotype = genoCols),
+    cutree_rows = 2,
+    angle_col = "315",
+  )
+```
+
+```{r, fig.height=8, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
 deCpmPlots[[2]]
 ```
 
-## Export data
+## Data export
 
 Final results were exported as Rds files for further analysis.
 
 ```{r}
 saveRDS(topTables, here("files/topTables.Rds"))
 saveRDS(topTables_cqn, here("files/topTables_cqn.Rds"))
+```
+```{r}
+sessionInfo() %>%
+  pander()
 ```
 
