@@ -1,0 +1,196 @@
+---
+title: "Differential Expression Enrichment Analysis"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Setup 
+
+```{r packages}
+library(tidyverse)
+library(magrittr)
+library(parallel)
+library(here)
+library(AnnotationHub)
+library(purrr)
+library(scales)
+library(kableExtra)
+library(edgeR)
+library(ggrepel)
+library(fgsea)
+library(RColorBrewer)
+library(pheatmap)
+library(cqn)
+library(ggpubr)
+library(DT)
+library(htmltools)
+library(pander)
+library(msigdbr)
+```
+
+```{r options}
+if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores <- detectCores() - 1
+```
+
+```{r}
+source(here("R/lbFuncs.R"))
+```
+
+## Annotations
+
+```{r}
+ah <- AnnotationHub() %>%
+  subset(species == "Danio rerio") %>%
+  subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH83189"]] ## Ens101
+```
+
+```{r}
+transcripts <- transcripts(ensDb)
+txLen <- exonsBy(ensDb, "tx") %>%
+  width() %>%
+  vapply(sum, integer(1))
+mcols(transcripts) <- mcols(transcripts)[
+  c("tx_id", "gene_id", "gc_content")
+] %>%
+  as.data.frame() %>%
+  mutate(length = txLen)
+```
+
+```{r}
+geneGc <- transcripts %>%
+  mcols() %>%
+  as_tibble() %>%
+  group_by(gene_id) %>%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )
+```
+
+```{r}
+genes <- genes(ensDb)
+mcols(genes) <- mcols(genes)[
+  c("gene_id", "gene_name", "gene_biotype", "entrezid")
+] %>%
+  as.data.frame() %>%
+  left_join(geneGc)
+```
+
+```{r}
+entrezGenes <- genes %>%
+  as.data.frame() %>%
+  dplyr::filter(!is.na(entrezid)) %>%
+  unnest(entrezid) %>%
+  dplyr::rename(entrez_gene = entrezid)
+```
+
+An `EnsDb` object was obtained for Ensembl release 101 with the `AnnotationHub` package.
+This contained the information required to set up gene and transcript annotations.
+Gene-level estimates of GC content and length were also generated which may be required as covariates in suitable analyses.
+
+## Differential expression data
+
+```{r}
+metadata <- read_csv(here("files/samples.csv")) %>%
+  dplyr::select(-sample) %>%
+  dplyr::rename(sample = basename, genotype = Genotype) %>%
+  ## We need some sample aliases that follow R naming conventions
+  mutate(
+    alias = c(
+      paste0(rep("fAD", 7), seq(1, 7)),
+      paste0(rep("fAI", 8), seq(1, 8)),
+      paste0(rep("wt", 9), seq(1, 9))
+    ),
+    group = genotype
+  )
+metadata$genotype <- fct_relevel(
+  metadata$genotype,
+  c("WT", "EOfAD-like/+", "fAI-like/+")
+)
+genoCols <- metadata$genotype %>%
+  levels() %>%
+  length() %>%
+  brewer.pal("Set1") %>%
+  setNames(levels(metadata$genotype))
+```
+
+```{r}
+topTables <- readRDS(here("files/topTables_cqn.Rds"))
+```
+
+Ranked genes from both comparisons in the [previous DE analysis](`r here("R/de_analysis.html")`) were loaded as a list of `topTable` objects.
+Only small sets of DE genes were identified due to the presence of an EOfAD-like or fAI-like mutation, which showed `r nrow(dplyr::filter(topTables[[1]], DE))` and `r nrow(dplyr::filter(topTables[[2]], DE))` DE genes respectively.
+
+# Enrichment testing
+
+The small number of DE genes presents challenges with statistical power for enrichment testing methods that use only DE genes.
+Therefore, only methods that utilise the complete list of genes were used for this analysis.
+
+## Gene sets
+
+Gene sets were obtained using the `msigdbr` package.
+Hallmark, KEGG and Wikipathways gene sets were used to give a comprehensive overview of any pathways that may be affected.
+
+```{r}
+hm <- msigdbr("Danio rerio", category = "H")  %>% 
+  left_join(entrezGenes) %>%
+  dplyr::filter(!is.na(gene_id)) %>%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+hmByGene <- hm %>%
+  split(f = .$gene_id) %>%
+  lapply(extract2, "gs_name")
+hmByID <- hm %>%
+  split(f = .$gs_name) %>%
+  lapply(extract2, "gene_id")
+```
+
+```{r}
+kg <- msigdbr("Danio rerio", category = "C2", subcategory = "CP:KEGG")  %>% 
+  left_join(entrezGenes) %>%
+  dplyr::filter(!is.na(gene_id)) %>%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+kgByGene <- kg  %>%
+  split(f = .$gene_id) %>%
+  lapply(extract2, "gs_name")
+kgByID <- kg  %>%
+  split(f = .$gs_name) %>%
+  lapply(extract2, "gene_id")
+```
+
+```{r}
+wk <- msigdbr("Danio rerio", category = "C2", subcategory = "CP:WIKIPATHWAYS")  %>% 
+  left_join(entrezGenes) %>%
+  dplyr::filter(!is.na(gene_id)) %>%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+wkByGene <- wk  %>%
+  split(f = .$gene_id) %>%
+  lapply(extract2, "gs_name")
+wkByID <- wk  %>%
+  split(f = .$gs_name) %>%
+  lapply(extract2, "gene_id")
+```
