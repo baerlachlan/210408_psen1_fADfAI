@@ -29,16 +29,18 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 # Setup 
 
 ```{r packages}
-library(tidyverse)
-library(magrittr)
-library(parallel)
-library(here)
-library(AnnotationHub)
-library(purrr)
-library(scales)
-library(kableExtra)
-library(UpSetR)
-library(SeqArray)
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(magrittr)
+  library(parallel)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(UpSetR)
+  library(SeqArray)
+})
 ```
 
 ```{r options}
@@ -65,6 +67,8 @@ mcols(genes) <- mcols(genes)[
 exons <- exonsBy(ensDb, by = "gene")
 ```
 
+An `EnsDb` object for Ensemble release 101 was setup for extracting gene and exon annotation information.
+
 ## Metadata
 
 ```{r}
@@ -72,8 +76,13 @@ metadata <- read_csv(here("files/samples.csv")) %>%
   dplyr::select(-sample) %>%
   dplyr::rename(sample = basename, genotype = Genotype)
 metadata %>%
+  dplyr::rename(
+    Sample = sample, `Fish ID` = fish_id, `Batch Killed` = batch_killed,
+    `Genotype 1` = genotype, `Genotype 2` = Genotype_2
+  ) %>%
   kable(
-    align = "lllllll"
+    align = "l",
+    caption = "Sample metadata"
   ) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed", "responsive")
@@ -95,18 +104,31 @@ drChrs <- seq(1:25)
 
 # Quality control
 
+There are a number of important quality control measures that must be taken to ensure reliable data for allele specific expression (ASE) testing. 
+The following procedures are based around the guidelines described in [Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
+
 ## WASP
 
+An important aspect to consider in ASE analysis is the potential for read mapping bias.
+For RNA-seq data mapped to a reference genome, reads that carry an alternate allele at positions of variation have at least one mismatch, and therefore a lower probability of aligning correctly than reads containing the reference allele.
+
 `WASP` provides a suite of tools for unbiased allele-specific read mapping.
-It does this by...
+The `WASP` workflow for mappability filtering is defined by 5 steps:
 
-Input files containing the genetic variants (SNVs) are needed to begin WASP filtering.
-Since we do not have phasing information, it is recommended to use text-based format opposed to HDF5 for the input files.
-The text-based input files have three space-delimited columns (position, ref_allele, alt_allele), and one input file per chromosome.
-The filenames must follow the convention `<#>.snps.txt.gz` (e.g `1.snps.txt.gz` for chromosome 1).
+1. Reads are mapped normally with the user's mapper of choice (`STAR` was chosen in this case).
+2. Reads that overlap identified SNVs and therefore may have mapping bias are determined using `find_intersecting_snps.py` script.
+Each overlapping read is output as a set of synthetic reads in `FASTQ` format with its allele swapped to to the other allele at the SNV site.
+3. The set of allele-swapped reads are re-mapped using the same method and options used in step 1.
+4. Reads where one or more allelic versions fail to map back to the same location are removed using `filter_remapped_reads.py` script.
+5. Reads that did not overlap SNVs are merged with those that show unbiased mapping from step 4 using `samtools`, resulting in a complete set of mappability-filtered aligned reads in `BAM` format.
 
-To gather SNV information called with the `GATK` workflow, the `VCF` files were firstly converted into `GDS` files.
-`GDS` objects allow for easy access of the data in `R`, but are large so will remain on the HPC system.
+To begin the `WASP` fltering procedure, input files containing genetic variants (SNVs) previously identified by the `GATK` workflow are needed.
+Since we do not have phasing information, it is recommended to use text-based format opposed to `HDF5` for the input files.
+The text-based input files require three space-delimited columns (position, ref_allele, alt_allele), and one input file per chromosome.
+The filenames must follow the convention `<chr>.snps.txt.gz` (e.g `1.snps.txt.gz` for chromosome 1).
+
+To gather SNV information called by the `GATK` workflow, the `VCF` files were firstly converted into `GDS` objects.
+`GDS` objects allow for easy access of the data in `R`, but are large so were kept on the HPC system.
 
 ```{r, results='hide'}
 vcfPaths <- list.files(
@@ -153,15 +175,22 @@ snvList <- lapply(seq_along(gdsPaths), function(x){
     dplyr::filter(
       chromosome %in% drChrs,
       str_detect(allele, "\\*", negate = TRUE) ## Remove deletions
-      ) %>%
+    ) %>%
     mutate(
       sample = sample,
       refAllele = str_split(allele, ",", simplify = TRUE)[,1],
       altAllele = str_split(allele, ",", simplify = TRUE)[,2]
-      )
+    )
   seqClose(gds)
   return(snvs)
 })
+```
+
+```{r}
+filtProgress <- snvList %>%
+  bind_rows() %>%
+  group_by(sample) %>%
+  summarise(noFilt = n())
 ```
 
 ```{r, results='hide'}
@@ -194,9 +223,12 @@ lapply(snvList, function(x){
 })
 ```
 
+After exporting text-based input files, WASP filtering was performed on the HPC system.
+The resulting `BAM` files were ready for allele specific expression read counting.
+
 ## ASEReadCounter
 
-GATK tool `ASEReadCounter` calculates allele counts at a set of positions after applying filters specifically tuned for AE analysis of RNA-seq data.
+`GATK` tool `ASEReadCounter` calculates allele counts at a set of positions after applying filters specifically tuned for ASE analysis of RNA-seq data.
 The filters operate on mapping quality, base quality, depth of coverage and overlapping paired reads.
 Each of these filters can be controlled by command-line arguments.
 The data in this analysis was generated with the following options:
@@ -204,9 +236,9 @@ The data in this analysis was generated with the following options:
 - `--min-mapping-quality 10`
 - `--min-base-quality 20`
 - `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
-  - Ths option counts all fragments where the base is consistent when mate pairs overlap.
+    - Ths option counts all fragments where the base is consistent when mate pairs overlap.
 - `--min-depth-of-non-filtered-base -1`
-  - This argument is disabled, because depth filtering was performed manually (see next section).
+    - This argument is disabled, because depth filtering was performed manually (see next section).
 
 Heterozygous SNVs detected by `ASEReadCounter` were recorded in separate `tsv` files for each sample. 
 These were loaded into R as a list of tibbles containing the unprocessed raw data for ASE analysis.
@@ -235,15 +267,13 @@ aseCounts <- lapply(files, function(file){
     ) %>%
     left_join(metadata[,c("sample", "genotype")]) %>%
     dplyr::select(
-      chromosome = contig, position, allele, refCount, altCount, totalCount, 
-      sample, genotype, lowMAPQDepth, lowBaseQDepth, rawDepth, otherBases, 
+      chromosome = contig, position, allele, refCount, altCount, totalCount,
+      sample, genotype, lowMAPQDepth, lowBaseQDepth, rawDepth, otherBases,
       improperPairs, refAllele, altAllele
     )
 }) %>% 
   set_names(samples)
 ```
-
-The number of genome-wide het-SNV positions as reported by `ASEReadCounter` ranged from `r comma(min(sapply(aseCounts, nrow)))` to `r comma(max(sapply(aseCounts, nrow)))` across all samples.
 
 ```{r include=FALSE, eval=FALSE}
 # nucCols <- tibble(A = NA, C = NA, G = NA, T = NA) # In case a base is not detected
@@ -272,8 +302,20 @@ The number of genome-wide het-SNV positions as reported by `ASEReadCounter` rang
 ```
 
 ```{r}
-filtProps <- aseCounts %>%
-  purrr::reduce(rbind) %>%
+filtProgress <- aseCounts %>%
+  bind_rows() %>%
+  group_by(sample) %>%
+  summarise(
+    softwareFilt = n()
+  ) %>%
+  left_join(filtProgress)
+```
+
+The number of genome-wide het-SNV positions as reported by `ASEReadCounter` following `WASP` filtering ranged from `r comma(min(filtProgress$softwareFilt))` to `r comma(max(filtProgress$softwareFilt))` across all samples.
+
+```{r}
+aseFiltProps <- aseCounts %>%
+  bind_rows() %>%
   group_by(sample) %>%
   summarise(
     mapQ = sum(lowMAPQDepth) / sum(rawDepth),
@@ -282,15 +324,15 @@ filtProps <- aseCounts %>%
   )
 ```
 
-With the above settings across all samples, reads filtered due to insufficient mapping quality ranged between `r percent(min(filtProps$mapQ), accuracy = 0.01)` and `r percent(max(filtProps$mapQ), accuracy = 0.01)`, reads filtered due to base quality ranged between `r percent(min(filtProps$baseQ), accuracy = 0.01)` and `r percent(max(filtProps$baseQ), accuracy = 0.01)`, and reads filtered due to overlapping mate pairs with inconsistent bases ranged between `r percent(min(filtProps$otherBases), accuracy = 0.01)` and `r percent(max(filtProps$otherBases), accuracy = 0.01)`.
-
-More information about recommended quality control measures can be found in [Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
+Across all samples, reads filtered due to insufficient mapping quality ranged between `r percent(min(aseFiltProps$mapQ), accuracy = 0.01)` and `r percent(max(aseFiltProps$mapQ), accuracy = 0.01)`, reads filtered due to base quality ranged between `r percent(min(aseFiltProps$baseQ), accuracy = 0.01)` and `r percent(max(aseFiltProps$baseQ), accuracy = 0.01)`, and reads filtered due to overlapping mate pairs with inconsistent bases ranged between `r percent(min(aseFiltProps$otherBases), accuracy = 0.01)` and `r percent(max(aseFiltProps$otherBases), accuracy = 0.01)`.
 
 ## Filtering
 
+The remaining manual filtering procedures were carried out in `R`.
+
 ### Exonic variants
 
-Since the variants originate from RNA-seq data, they were filtered based on genomic position for those that lie in only exonic regions (Ensembl version 101).
+Variants in this analysis were determined from RNA-seq data, and therefore were filtered based on genomic position for those that lie in only exonic regions (Ensembl version 101).
 Gene identifiers were also annotated for each position to enable downstream analysis of ASE across genes.
 
 ```{r}
@@ -317,17 +359,27 @@ counts <- lapply(seq_along(aseCounts), function(x){
   set_names(samples)
 ```
 
-After filtering for SNVs in exonic regions, the remaining number of het-SNVs ranged from `r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))` across all samples.
+```{r}
+filtProgress <- counts %>%
+  bind_rows() %>%
+  group_by(sample) %>%
+  summarise(
+    exonFilt = n()
+  ) %>%
+  left_join(filtProgress)
+```
+
+After filtering for SNVs in exonic regions, the remaining number of het-SNVs ranged from `r comma(min(filtProgress$exonFilt))` to `r comma(max(filtProgress$exonFilt))` across all samples.
 
 ### Coverage 
 
-Another important QC step before ASE anyalysis involves filtering Het-SNV sites based on coverage, as sites with low total counts are uninformative.
+Another important QC step involves filtering Het-SNV sites based on coverage, as sites with low total counts are uninformative.
 
-Firstly, a quick inspection of coverage distribution was performed:
+Firstly, a quick inspection of coverage distribution:
 
-```{r, fig.cap="*Cumulative distribution of RNA-seq read coverage per het-SNV. Each line represents a separate sample.*"}
+```{r, fig.cap="*Cumulative distribution of RNA-seq read coverage per het-SNV. Each line represents a separate sample. No samples appear problematic as they all display consistent read coverage distributions.*"}
 counts %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   ggplot(aes(totalCount, colour = sample)) +
   stat_ecdf(geom = "step") +
   coord_cartesian(xlim = c(0, 400)) +
@@ -363,7 +415,7 @@ lapply(counts, function(x){
     sample = sample
   )
 }) %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   ggplot(aes(bin, n, fill = bin)) +
   geom_boxplot() +
   labs(x = "Reads / het-SNV", y = "het-SNVs per sample") +
@@ -376,12 +428,22 @@ counts <- lapply(counts, function(x){
 })
 ```
 
-A cut-off of at least 10 counts per het-SNV position was applied, leaving `r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))` het-SNVs across all samples.
+```{r}
+filtProgress <- counts %>%
+  bind_rows() %>%
+  group_by(sample) %>%
+  summarise(
+    covFilt = n()
+  ) %>%
+  left_join(filtProgress)
+```
+
+A cut-off of at least 10 counts per het-SNV position was applied, leaving `r comma(min(filtProgress$covFilt))` to `r comma(max(filtProgress$covFilt))` het-SNVs across all samples.
 
 ### Mono-allelic expression
 
 Producing evidence of mono-allelic expression from short read RNA-seq datasets without parental genotypes or imprinting information is a controversial issue.
-Therefore, het-SNV sites were filtered based on a depth criteria for each allele ($\ge$ 3 counts or $>$ 1% of the total counts for that allele).
+Het-SNV sites were therefore filtered based on a depth criteria for each allele ($\ge$ 3 counts or $>$ 1% of the total counts for that allele).
 
 ```{r}
 counts <- lapply(counts, function(x){
@@ -395,9 +457,42 @@ counts <- lapply(counts, function(x){
 })
 ```
 
-After filtering for mono-allelic expression, `r comma(min(sapply(counts, nrow)))` to `r comma(max(sapply(counts, nrow)))` het-SNVs remained across all samples.
+```{r}
+filtProgress <- counts %>%
+  bind_rows() %>%
+  group_by(sample) %>%
+  summarise(
+    monoFilt = n()
+  ) %>%
+  left_join(filtProgress)
+```
 
-### Summary
+After filtering for mono-allelic expression, `r comma(min(filtProgress$monoFilt))` to `r comma(max(filtProgress$monoFilt))` het-SNVs remained across all samples.
+
+# Summary
+
+```{r, fig.cap="*The total number of het-SNVs remaining after various quality control filtering steps. The filters were applied sequentially from left to right across the x-axis, such that the remaining number of het-SNVs was always less than the previous step.*"}
+filtProgress %>%
+  dplyr::select(
+    sample, None = noFilt, `WASP/ASEReadCounter` = softwareFilt,
+    Exonic = exonFilt, Coverage = covFilt, `Mono-allelic expression` = monoFilt
+  ) %>%
+  pivot_longer(cols = -sample, names_to = "Filter", values_to = "SNVs") %>%
+  mutate(Filter = factor(Filter, levels = unique(.$Filter))) %>%
+  ggplot(aes(Filter, SNVs, group = Filter, fill = Filter)) +
+  geom_boxplot() +
+  scale_y_log10(
+    labels = comma,
+    breaks = c(seq(0, 500000, by = 100000), seq(750000, 1500000, by = 250000))
+  ) +
+  labs(y = "hetSNVs per sample") +
+  theme(
+    legend.position = "bottom",
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+```
 
 ```{r}
 genesWithSnvs <- lapply(counts, function(x){
@@ -411,12 +506,10 @@ genesWithSnvs <- lapply(counts, function(x){
   snvs <- nrow(x)
   tibble(sample = sample, atLeast1 = atLeast1, atLeast2 = atLeast2, snvs = snvs)
 }) %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   left_join(metadata[,c("sample", "genotype")]) %>%
   dplyr::arrange(genotype, sample)
 ```
-
-The total number of genes and het-SNVs remaining after QC measures is summarised below:
 
 ```{r}
 genesWithSnvs %>%
@@ -424,9 +517,10 @@ genesWithSnvs %>%
     Sample = sample, Genotype = genotype, Genes = atLeast1, SNVs = snvs
   ) %>%
   kable(
-    align = "lll",
-    caption = paste(
-      "Overall numbers of genes and SNVs detected in each sample after filtering."
+    align = "l",
+    caption = paste0(
+      "A summary of the remaining number of genes and SNVs detected in each ",
+      "sample after all quality control procedures were performed."
     )
   ) %>%
   kable_styling(
@@ -436,10 +530,8 @@ genesWithSnvs %>%
 
 ## Reference mapping bias
 
-An important aspect to consider in AE analysis is the potential for mapping bias.
-For RNA-seq data mapped to a reference genome, reads that carry an alternate allele at positions of variation have at least one mismatch, and therefore a lower probability of aligning correctly than reads containing the reference allele.
-To estimate this effect we can calculate the genome-wide reference ratio, which will indicate a reference mapping bias if above 0.5.
-This calculated ratio may be more suitable as the null in downstream statistical testing.
+`WASP` filtering is expected to remove the vast majority of reads with mapping bias, but was checked to confirm its effectiveness.
+To estimate this effect the genome-wide reference allele ratio was calculated, which indicates a residual mapping bias if it shows a large deviation from 0.5.
 
 ```{r}
 ratios <- lapply(counts, function(x){
@@ -456,36 +548,40 @@ ratios <- lapply(counts, function(x){
 })
 ```
 
-```{r fig.cap="*Histogram of global reference allele ratios at each het-SNV faceted by sample. The distributions show a similar profile of reference mapping bias indicated by an inflation of reference allele ratios > 0.5. Allelic ratios above 0.51 are shown in blue and below 0.49 in red, while balanced expression (0.49-0.51) is coloured grey.*"}
-ratioDists <- purrr::reduce(ratios, rbind) %>%
+This can be visualised by plotting the distribution of reference allele ratios of each SNV.
+Bins were setup such that each bin represented a range of 0.01.
+A skew of towards one side of the distribution indicates mapping bias is still present.
+
+```{r, fig.height=9, fig.cap="*Histogram of global reference allele ratios at each het-SNV faceted by sample. Reference ratios above 0.51 are shown in red and below 0.49 in blue, while balanced expression (0.49-0.51) is coloured grey. All samples showed profiles indicative of no residual mapping bias.*"}
+ratioDists <- bind_rows(ratios)
+ratioDists %>%
   mutate(
-    fill = ifelse(refRatio < 0.49, "less", NA),
-    fill = ifelse(between(refRatio, 0.49, 0.51), "even", fill),
-    fill = ifelse(refRatio > 0.51, "more", fill),
-  )
-ggplot(ratioDists, aes(refRatio)) +
-  geom_histogram(
-    data = subset(ratioDists, fill == "less"),
-    bins = 100, fill = "red"
-  ) +
-  geom_histogram(
-    data = subset(ratioDists, fill == "even"),
-    bins = 100, fill = "grey"
-  ) +
-  geom_histogram(
-    data = subset(ratioDists, fill == "more"),
-    bins = 100, fill = "blue"
-  ) +
+    bin = cut(
+      refRatio,
+      seq(0, 1, by = 0.01),
+      labels = FALSE,
+      include.lowest = TRUE
+    ),
+    fill = case_when(
+      bin < 49 ~ "red",
+      between(bin, 49, 51) ~ "grey",
+      bin > 51 ~ "blue"
+    )
+  ) %>%
+  ggplot(aes(refRatio, fill = fill)) +
+  geom_histogram(binwidth = 0.01, boundary = 0) +
   labs(x = "Reference allele ratio", y = "Count") +
-  facet_wrap(~ sample, ncol = 4)
+  scale_fill_manual(values = c("red", "grey50", "blue")) +
+  facet_wrap(~ sample, ncol = 4) +
+  theme(legend.position = "none")
 ```
 
-The mean reference mapping ratios were calculated for each sample.
-This value will be used as the null statistic for detecting ASE.
+As an alternative viewpoint, boxplots of reference allele ratios were plotted for each sample.
+Median/mean reference allele ratios that deviate substantially from 0.5 indicate a mapping bias.
 
-```{r, fig.cap="*Boxplots showing mapping bias for each sample. The mean reference ratio is indicated with a black diamond.*"}
+```{r, fig.cap="*Boxplots showing mapping bias for each sample. The mean reference ratio is indicated with a black diamond. Filtering procedures successfully were confirmed to have removed any potential mapping bias.*"}
 ratios %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   left_join(metadata[,c("sample", "genotype")]) %>%
   dplyr::arrange(genotype, sample) %>%
   mutate(sample = factor(sample, levels = unique(sample))) %>%
@@ -502,27 +598,30 @@ ratios %>%
     axis.text.x = element_text(angle = -90, vjust = 0.5),
     legend.position = "bottom"
   ) +
-  ggtitle(label = "After WASP")
+  ggtitle(label = "Reference allele ratios after QC measures")
 ```
 
 ```{r}
 refBias <- ratios %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   group_by(sample) %>%
   summarise(mean = mean(refRatio), median = median(refRatio))
 altBias <- ratios %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   group_by(sample) %>%
   summarise(mean = mean(altRatio), median = median(altRatio))
 ```
 
-A reference mapping bias is evident across all samples.
+No reference mapping bias was evident in any sample.
 Mean reference ratios ranged between `r round(min(refBias$mean), 3)` and `r round(max(refBias$mean), 3)`.
 Median reference ratios ranged between `r round(min(refBias$median), 3)` and `r round(max(refBias$median), 3)`.
 
 # Export
 
-For static ASE geneiASE software requires ...
+`geneiASE` software was chosen for static ASE testing.
+Static ASE describes the difference between two variants of a heterozygous allele in a single sample in an unchanging condition.
+For static ASE, `geneiASE` software requires allele counts as a `tsv` file with four columns: feautureID, snpID, alternative allele count, reference allele count.
+Each sample's allele counts were exported following this format for ASE testing with `geneiASE`.
 
 ```{r, results="hide"}
 staticCounts <- lapply(counts, function(x){
@@ -547,4 +646,7 @@ lapply(seq_along(staticCounts), function(x){
 })
 ```
 
+```{r}
+sessionInfo()
+```
 

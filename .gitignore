@@ -40,3 +40,4 @@ files/fgsea*.Rds
 11_aseReadCounter/*
 14_aseReadCounts/*
 *.static.tsv
+R/psen1_3way_RNA-seqAnalysis.Rmd
