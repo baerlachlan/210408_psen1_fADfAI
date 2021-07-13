@@ -29,22 +29,26 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 # Setup 
 
 ```{r packages}
-library(tidyverse)
-library(magrittr)
-library(parallel)
-library(here)
-library(AnnotationHub)
-library(purrr)
-library(scales)
-library(kableExtra)
-library(statmod)
-library(fgsea)
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(magrittr)
+  library(parallel)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(statmod)
+  library(fgsea)
+  library(tictoc)
+  library(future.apply)
+})
 ```
 
 ```{r options}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
-cores <- detectCores() - 1
+cores <- detectCores() - 2
 ```
 
 ```{r}
@@ -281,33 +285,74 @@ permRanks_nd <- function(topASE){
 }
 ```
 
+---
+
 ```{r}
-## This code chunk has a lengthy run-time and will not execute if file already exists
-## Instead object is saved as Rds and reloaded when needed
-if (!file.exists(here("files/fgsea_nd.Rds"))) {
-  set.seed(17)
-  ranks_nd <- replicate(
-    n = 200,
-    expr = lapply(topASE, permRanks_nd)
-  ) %>%
-    t() %>%
-    as_tibble()
-  ## 3384.696 sec elapsed
-  set.seed(17)
-  fgsea_nd <- lapply(as.list(ranks_nd), function(x){
-    x %>%
-      lapply(function(y){
-        fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-      })
-  }) %>%
-    set_names(colnames(ranks_nd))
-  ## 4205.458 sec elapsed
-  saveRDS(fgsea_nd, here("files/fgsea_nd.Rds"))
-}
+perms <- 500
+file_nd <- paste0(here(), "/files/fgsea_nd_", perms, "perms_parallel.Rds")
 ```
 
 ```{r}
-fgsea_nd <- readRDS(here("files/fgsea_nd.Rds"))
+## This code chunk has a lengthy run-time and will not run if the object has already been saved
+## Across 6 threads it takes approximately 3 hours to complete
+if (!file.exists(file_nd)) {
+  plan(tweak(multisession, workers = cores))
+  ranks_nd <- future_sapply(
+    1:perms,
+    function(...){sapply(topASE, permRanks_nd)},
+    future.seed = 17
+  ) %>%
+    t() %>%
+    as_tibble()
+  fgsea_nd <- future_lapply(
+    as.list(ranks_nd),
+    function(x){
+      lapply(x, function(y){
+        fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+      })
+    },
+    future.seed = 17
+  ) %>%
+    set_names(colnames(ranks_nd))
+  saveRDS(fgsea_nd, file_nd)
+}
+```
+
+---
+
+```{r}
+# ## This code chunk has a lengthy run-time so the object is saved as Rds and reloaded when needed
+# ## It will not execute if the saved object already exists
+# perms <- 500
+# file_nd <- paste0(here(), "/files/fgsea_nd_", perms, "perms.Rds")
+# if (!file.exists(file_nd)) {
+#   set.seed(17)
+#   tic()
+#   ranks_nd <- replicate(
+#     n = perms,
+#     expr = lapply(topASE, permRanks_nd)
+#   ) %>%
+#     t() %>%
+#     as_tibble()
+#   toc()
+#   ## 3384.696 sec elapsed
+#   set.seed(17)
+#   tic()
+#   fgsea_nd <- mclapply(as.list(ranks_nd), function(x){
+#     x %>%
+#       lapply(function(y){
+#         fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+#       })
+#   }, mc.cores = cores) %>%
+#     set_names(colnames(ranks_nd))
+#   toc()
+#   ## 4205.458 sec elapsed
+#   saveRDS(fgsea_nd, file_nd)
+# }
+```
+
+```{r}
+fgsea_nd <- readRDS(here("files/fgsea_nd_200perms.Rds"))
 ```
 
 ```{r}
@@ -336,7 +381,7 @@ mean_nd <- lapply(pvals_nd, function(sample){
 }) 
 ```
 
-```{r}
+```{r, fig.height=15}
 lapply(seq_along(mean_nd), function(ind){
   x <- mean_nd[[ind]]
   x %>%
@@ -422,29 +467,89 @@ permRanks_d <- function(topASE){
 }
 ```
 
+---
+
 ```{r}
-## This code chunk has a lengthy run-time and will not execute if file already exists
-## Instead object is saved as Rds and reloaded when needed
-if (!file.exists(here("files/fgsea_d.Rds"))) {
-  set.seed(17)
-  ranks_d <- replicate(
-    n = 200,
-    expr = lapply(topASE[str_detect(names(topASE), "(fAD|fAI)")], permRanks_d)
-  ) %>%
-    t() %>%
-    as_tibble()
-  ## 3643.382 sec elapsed
-  set.seed(17)
-  fgsea_d <- lapply(as.list(ranks_d), function(x){
-    x %>%
-      lapply(function(y){
+perms <- 500
+file_d <- paste0(here(), "/files/fgsea_d_", perms, "perms_parallel.Rds")
+```
+
+```{r}
+ranks_d <- readRDS(here("files/ranks_d.Rds"))
+```
+
+```{r}
+plan(list(tweak(multisession, workers = 4), sequential))
+```
+
+```{r}
+tic()
+ranks_d <- future_sapply(
+  1:perms,
+  function(...){
+    sapply(topASE[str_detect(names(topASE), "(fAD|fAI)")], permRanks_d)
+  },
+  future.seed = 17
+) %>%
+  t() %>%
+  as_tibble()
+toc()
+```
+
+```{r}
+fgsea_d <- future_lapply(
+  as.list(ranks_d),
+  function(x){
+    future_lapply(
+      x, 
+      function(y){
         fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-      })
-  }) %>%
-    set_names(colnames(ranks_d))
-  ## 2343.242 sec elapsed
-  saveRDS(fgsea_d, here("files/fgsea_d.Rds"))
-}
+        cat("Done GSEA\n")
+      },
+      future.seed = TRUE)
+    cat("---Done sample---\n")
+  }
+) 
+fgsea_d <- fgsea_d %>%
+  set_names(colnames(ranks_d))
+saveRDS(fgsea_d, file_d)
+```
+
+```{r}
+saveRDS(fgsea_d, file_d)
+```
+
+---
+
+```{r}
+# ## This code chunk has a lengthy run-time so the object is saved as Rds and reloaded when needed
+# ## It will not execute if the saved object already exists
+# perms <- 500
+# file_d <- paste0(here(), "/files/fgsea_d_", perms, "perms.Rds")
+# if (!file.exists(file_d)) {
+#   set.seed(17)
+#   tic()
+#   ranks_d <- replicate(
+#     n = perms,
+#     expr = lapply(topASE[str_detect(names(topASE), "(fAD|fAI)")], permRanks_d)
+#   ) %>%
+#     t() %>%
+#     as_tibble()
+#   toc()
+#   ## 3384.696 sec elapsed
+#   set.seed(17)
+#   tic()
+#   fgsea_d <- mclapply(as.list(ranks_d), function(x){
+#     x %>%
+#       lapply(function(y){
+#         fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+#       })
+#   }, mc.cores = cores) %>%
+#     set_names(colnames(ranks_d))
+#   toc()
+#   ## 4205.458 sec elapsed
+#   saveRDS(fgsea_d, file_d)
+# }
 ```
 
 ```{r}
@@ -477,7 +582,7 @@ mean_d <- lapply(pvals_d, function(sample){
 }) 
 ```
 
-```{r}
+```{r, fig.height=15}
 lapply(seq_along(mean_d), function(ind){
   x <- mean_d[[ind]]
   x %>%
