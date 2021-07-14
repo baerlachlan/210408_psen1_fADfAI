@@ -1,0 +1,2476 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Lachlan Baer" />
+
+
+<title>Differential Expression Enrichment Analysis</title>
+
+<script src="site_libs/header-attrs-2.9/header-attrs.js"></script>
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">210408_psen1_fADfAI_snv</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="de_analysis.html">DE analysis</a>
+</li>
+<li>
+  <a href="de_enrichment.html">DE enrichment</a>
+</li>
+<li>
+  <a href="ase_qc.html">ASE QC</a>
+</li>
+<li>
+  <a href="ase_analysis.html">ASE analysis</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        <li>
+  <a href="https://github.com/baerlachlan/210408_psen1_fADfAI_snv">
+    <span class="fa fa-github"></span>
+     
+  </a>
+</li>
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Differential Expression Enrichment Analysis</h1>
+<h4 class="author">Lachlan Baer</h4>
+<h4 class="date">14 July, 2021</h4>
+
+</div>
+
+
+<div id="setup" class="section level1">
+<h1>Setup</h1>
+<pre class="r"><code>suppressPackageStartupMessages({
+  ## Common
+  library(tidyverse)
+  library(magrittr)
+  library(future.apply)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
+  library(edgeR)
+  library(fgsea)
+  library(pheatmap)
+  library(cqn)
+  library(DT)
+  library(htmltools)
+  library(msigdbr)
+})</code></pre>
+<pre class="r"><code>if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores &lt;- availableCores() - 1</code></pre>
+<pre class="r"><code>source(here(&quot;R/lbFuncs.R&quot;))</code></pre>
+<div id="annotations" class="section level2">
+<h2>Annotations</h2>
+<pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
+  subset(species == &quot;Danio rerio&quot;) %&gt;%
+  subset(rdataclass == &quot;EnsDb&quot;)
+ensDb &lt;- ah[[&quot;AH83189&quot;]] ## Ens101</code></pre>
+<pre class="r"><code>transcripts &lt;- transcripts(ensDb)
+txLen &lt;- exonsBy(ensDb, &quot;tx&quot;) %&gt;%
+  width() %&gt;%
+  vapply(sum, integer(1))
+mcols(transcripts) &lt;- mcols(transcripts)[
+  c(&quot;tx_id&quot;, &quot;gene_id&quot;, &quot;gc_content&quot;)
+] %&gt;%
+  as.data.frame() %&gt;%
+  mutate(length = txLen)</code></pre>
+<pre class="r"><code>geneGc &lt;- transcripts %&gt;%
+  mcols() %&gt;%
+  as_tibble() %&gt;%
+  group_by(gene_id) %&gt;%
+  summarise(
+    gc_content = sum(gc_content*length) / sum(length),
+    length = ceiling(median(length))
+  )</code></pre>
+<pre class="r"><code>genes &lt;- genes(ensDb)
+mcols(genes) &lt;- mcols(genes)[
+  c(&quot;gene_id&quot;, &quot;gene_name&quot;, &quot;gene_biotype&quot;, &quot;entrezid&quot;)
+] %&gt;%
+  as.data.frame() %&gt;%
+  left_join(geneGc)</code></pre>
+<p>An <code>EnsDb</code> object was obtained for Ensembl release 101 with the <code>AnnotationHub</code> package. This contained the information required to set up gene and transcript annotations. Gene-level estimates of GC content and length were also generated which may be required as covariates in suitable analyses.</p>
+<pre class="r"><code>entrezGenes &lt;- genes %&gt;%
+  as.data.frame() %&gt;%
+  dplyr::filter(!is.na(entrezid)) %&gt;%
+  unnest(entrezid) %&gt;%
+  dplyr::rename(entrez_gene = entrezid)</code></pre>
+<pre class="r"><code>geneChrs &lt;- as.data.frame(genes) %&gt;%
+  dplyr::select(gene_id, chromosome = seqnames) %&gt;%
+  as_tibble()</code></pre>
+</div>
+<div id="differential-expression-data" class="section level2">
+<h2>Differential expression data</h2>
+<pre class="r"><code>metadata &lt;- read_csv(here(&quot;files/samples.csv&quot;)) %&gt;%
+  dplyr::select(-sample) %&gt;%
+  dplyr::rename(sample = basename, genotype = Genotype) %&gt;%
+  ## We need some sample aliases that follow R naming conventions
+  mutate(
+    alias = c(
+      paste0(rep(&quot;fAD&quot;, 7), seq(1, 7)),
+      paste0(rep(&quot;fAI&quot;, 8), seq(1, 8)),
+      paste0(rep(&quot;wt&quot;, 9), seq(1, 9))
+    ),
+    group = genotype
+  )
+metadata$genotype &lt;- fct_relevel(
+  metadata$genotype,
+  c(&quot;WT&quot;, &quot;EOfAD-like/+&quot;, &quot;fAI-like/+&quot;)
+)
+genoCols &lt;- metadata$genotype %&gt;%
+  levels() %&gt;%
+  length() %&gt;%
+  brewer.pal(&quot;Set1&quot;) %&gt;%
+  setNames(levels(metadata$genotype))</code></pre>
+<pre class="r"><code>topTables &lt;- readRDS(here(&quot;files/topTables_cqn.Rds&quot;)) %&gt;%
+  set_names(c(&quot;EOfAD&quot;, &quot;fAI&quot;))</code></pre>
+<p>Genes from both genetype comparisons in the <a href="/home/lbaer/bioinformatics/projects/210408_psen1_fADfAI_snv/R/de_analysis.html">previous DE analysis</a> were loaded as a list of <code>topTable</code> objects. The names of the list elements were changed from those used in the previous DE analysis, such that they now follow <code>R</code> naming conventions and hence allow for more intuitive code.</p>
+<p>Only small sets of DE genes were identified due to the presence of an EOfAD-like or fAI-like mutation, which showed 8 and 13 DE genes respectively.</p>
+</div>
+</div>
+<div id="enrichment-testing" class="section level1">
+<h1>Enrichment testing</h1>
+<p>Small numbers of DE genes present challenges as they don’t often reach the required statistical power for enrichment methods that use only discrete sets of genes classified as DE. However, there are other alternative methods that utilise the complete set of detectable genes in the form of a ranked list.</p>
+<div id="ranks" class="section level2">
+<h2>Ranks</h2>
+<p>The first ranking approach involved taking each gene’s sign of logFC and multiplying by its corresponding -log10(p-value) of differential expression. This results in a directional ranking structure moving from most significant upregulated genes to most significant downregulated genes.</p>
+<pre class="r"><code>ranksWithSign &lt;- lapply(topTables, function(x){
+  x %&gt;%
+    mutate(stat = -log10(PValue) * sign(logFC)) %&gt;%
+    dplyr::arrange(desc(stat)) %&gt;%
+    with(structure(stat, names = gene_id))
+})</code></pre>
+<p>An alternative approach is to rank genes only by -log10(p-value), resulting in a list ranked by significance alone with no directionality. Overall functional effects on a cell are not always consistent with the direction of transcriptional regulation. i.e. downregulation of one transcript may have a similar resulting function to upregulation of a different transcript. Therefore, it is important to consider both approaches to gene list ranking structure.</p>
+<pre class="r"><code>ranksNoSign &lt;- lapply(topTables, function(x){
+  x %&gt;%
+    mutate(stat = -log10(PValue)) %&gt;%
+    dplyr::arrange(desc(stat)) %&gt;%
+    with(structure(stat, names = gene_id))
+})</code></pre>
+</div>
+<div id="gene-sets" class="section level2">
+<h2>Gene sets</h2>
+<p>Multiple databases were accessed to obtain gene sets via the <code>msigdbr</code> package. For this analysis the Hallmark, KEGG and Wikipathways gene sets were chosen.</p>
+<pre class="r"><code>hm &lt;- msigdbr(&quot;Danio rerio&quot;, category = &quot;H&quot;)  %&gt;% 
+  left_join(entrezGenes) %&gt;%
+  dplyr::filter(!is.na(gene_id)) %&gt;%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+hmByGene &lt;- hm %&gt;%
+  split(f = .$gene_id) %&gt;%
+  lapply(extract2, &quot;gs_name&quot;)
+hmByID &lt;- hm %&gt;%
+  split(f = .$gs_name) %&gt;%
+  lapply(extract2, &quot;gene_id&quot;)</code></pre>
+<p>The Hallmark gene sets consists of 50 gene sets ranging from sizes of 39 to 265 genes.</p>
+<pre class="r"><code>kg &lt;- msigdbr(&quot;Danio rerio&quot;, category = &quot;C2&quot;, subcategory = &quot;CP:KEGG&quot;)  %&gt;% 
+  left_join(entrezGenes) %&gt;%
+  dplyr::filter(!is.na(gene_id)) %&gt;%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+kgByGene &lt;- kg  %&gt;%
+  split(f = .$gene_id) %&gt;%
+  lapply(extract2, &quot;gs_name&quot;)
+kgByID &lt;- kg  %&gt;%
+  split(f = .$gs_name) %&gt;%
+  lapply(extract2, &quot;gene_id&quot;)</code></pre>
+<p>The KEGG gene sets consists of 186 gene sets ranging from sizes of 10 to 398 genes.</p>
+<pre class="r"><code>wk &lt;- msigdbr(&quot;Danio rerio&quot;, category = &quot;C2&quot;, subcategory = &quot;CP:WIKIPATHWAYS&quot;)  %&gt;% 
+  left_join(entrezGenes) %&gt;%
+  dplyr::filter(!is.na(gene_id)) %&gt;%
+  distinct(gs_name, gene_id, .keep_all = TRUE)
+wkByGene &lt;- wk  %&gt;%
+  split(f = .$gene_id) %&gt;%
+  lapply(extract2, &quot;gs_name&quot;)
+wkByID &lt;- wk  %&gt;%
+  split(f = .$gs_name) %&gt;%
+  lapply(extract2, &quot;gene_id&quot;)</code></pre>
+<p>The Wikipathways gene sets consists of 615 gene sets ranging from sizes of 3 to 534 genes.</p>
+</div>
+<div id="directional-gsea" class="section level2">
+<h2>Directional GSEA</h2>
+<p>The following Gene Set Enrichment Analyses were performed taking directionality into account.</p>
+<div id="hallmark" class="section level3">
+<h3>Hallmark</h3>
+<pre class="r"><code>dGsea_hm &lt;- lapply(ranksWithSign, function(x){
+  fgseaMultilevel(hmByID, x, eps = 0) %&gt;%
+    as_tibble() %&gt;%
+    dplyr::rename(FDR = padj) %&gt;%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, &quot;bonferroni&quot;),
+      DE = padj &lt; 0.05
+    ) %&gt;%
+    dplyr::arrange(pval)
+})</code></pre>
+<pre class="r"><code>dGsea_hm$EOfAD %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;HALLMARK_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Hallmark pathways for the EOfAD comparison&quot;,
+      &quot;using directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 12 enriched Hallmark pathways for the EOfAD comparison using directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+INTERFERON_GAMMA_RESPONSE
+</td>
+<td style="text-align:left;">
+168
+</td>
+<td style="text-align:left;">
+73
+</td>
+<td style="text-align:left;">
+1.35e-12
+</td>
+<td style="text-align:left;">
+6.76e-11
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ALLOGRAFT_REJECTION
+</td>
+<td style="text-align:left;">
+159
+</td>
+<td style="text-align:left;">
+58
+</td>
+<td style="text-align:left;">
+3.74e-09
+</td>
+<td style="text-align:left;">
+1.87e-07
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+INTERFERON_ALPHA_RESPONSE
+</td>
+<td style="text-align:left;">
+76
+</td>
+<td style="text-align:left;">
+27
+</td>
+<td style="text-align:left;">
+3.09e-07
+</td>
+<td style="text-align:left;">
+1.55e-05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+OXIDATIVE_PHOSPHORYLATION
+</td>
+<td style="text-align:left;">
+199
+</td>
+<td style="text-align:left;">
+102
+</td>
+<td style="text-align:left;">
+1.30e-05
+</td>
+<td style="text-align:left;">
+6.51e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+TNFA_SIGNALING_VIA_NFKB
+</td>
+<td style="text-align:left;">
+185
+</td>
+<td style="text-align:left;">
+69
+</td>
+<td style="text-align:left;">
+1.64e-05
+</td>
+<td style="text-align:left;">
+8.18e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+HYPOXIA
+</td>
+<td style="text-align:left;">
+189
+</td>
+<td style="text-align:left;">
+67
+</td>
+<td style="text-align:left;">
+5.10e-05
+</td>
+<td style="text-align:left;">
+2.55e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+INFLAMMATORY_RESPONSE
+</td>
+<td style="text-align:left;">
+169
+</td>
+<td style="text-align:left;">
+64
+</td>
+<td style="text-align:left;">
+6.10e-05
+</td>
+<td style="text-align:left;">
+3.05e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+IL6_JAK_STAT3_SIGNALING
+</td>
+<td style="text-align:left;">
+61
+</td>
+<td style="text-align:left;">
+26
+</td>
+<td style="text-align:left;">
+1.15e-04
+</td>
+<td style="text-align:left;">
+5.77e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+IL2_STAT5_SIGNALING
+</td>
+<td style="text-align:left;">
+182
+</td>
+<td style="text-align:left;">
+64
+</td>
+<td style="text-align:left;">
+1.32e-04
+</td>
+<td style="text-align:left;">
+6.60e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+MYOGENESIS
+</td>
+<td style="text-align:left;">
+179
+</td>
+<td style="text-align:left;">
+44
+</td>
+<td style="text-align:left;">
+3.33e-04
+</td>
+<td style="text-align:left;">
+1.67e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+KRAS_SIGNALING_UP
+</td>
+<td style="text-align:left;">
+179
+</td>
+<td style="text-align:left;">
+49
+</td>
+<td style="text-align:left;">
+4.95e-04
+</td>
+<td style="text-align:left;">
+2.47e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+EPITHELIAL_MESENCHYMAL_TRANSITION
+</td>
+<td style="text-align:left;">
+188
+</td>
+<td style="text-align:left;">
+65
+</td>
+<td style="text-align:left;">
+5.53e-04
+</td>
+<td style="text-align:left;">
+2.77e-02
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>dGsea_hm$fAI %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;HALLMARK_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Hallmark pathways for the fAI comparison&quot;,
+      &quot;using directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 8 enriched Hallmark pathways for the fAI comparison using directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+INTERFERON_GAMMA_RESPONSE
+</td>
+<td style="text-align:left;">
+168
+</td>
+<td style="text-align:left;">
+58
+</td>
+<td style="text-align:left;">
+4.16e-06
+</td>
+<td style="text-align:left;">
+2.08e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+MITOTIC_SPINDLE
+</td>
+<td style="text-align:left;">
+208
+</td>
+<td style="text-align:left;">
+71
+</td>
+<td style="text-align:left;">
+5.36e-06
+</td>
+<td style="text-align:left;">
+2.68e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ALLOGRAFT_REJECTION
+</td>
+<td style="text-align:left;">
+159
+</td>
+<td style="text-align:left;">
+59
+</td>
+<td style="text-align:left;">
+1.55e-05
+</td>
+<td style="text-align:left;">
+7.73e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+KRAS_SIGNALING_UP
+</td>
+<td style="text-align:left;">
+179
+</td>
+<td style="text-align:left;">
+42
+</td>
+<td style="text-align:left;">
+1.98e-05
+</td>
+<td style="text-align:left;">
+9.89e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+TNFA_SIGNALING_VIA_NFKB
+</td>
+<td style="text-align:left;">
+185
+</td>
+<td style="text-align:left;">
+55
+</td>
+<td style="text-align:left;">
+9.55e-05
+</td>
+<td style="text-align:left;">
+4.78e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+UV_RESPONSE_DN
+</td>
+<td style="text-align:left;">
+152
+</td>
+<td style="text-align:left;">
+65
+</td>
+<td style="text-align:left;">
+2.21e-04
+</td>
+<td style="text-align:left;">
+1.11e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+APICAL_JUNCTION
+</td>
+<td style="text-align:left;">
+191
+</td>
+<td style="text-align:left;">
+67
+</td>
+<td style="text-align:left;">
+9.25e-04
+</td>
+<td style="text-align:left;">
+4.63e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+INTERFERON_ALPHA_RESPONSE
+</td>
+<td style="text-align:left;">
+76
+</td>
+<td style="text-align:left;">
+14
+</td>
+<td style="text-align:left;">
+9.30e-04
+</td>
+<td style="text-align:left;">
+4.65e-02
+</td>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+<div id="kegg" class="section level3">
+<h3>KEGG</h3>
+<pre class="r"><code>dGsea_kg &lt;- lapply(ranksWithSign, function(x){
+  fgseaMultilevel(kgByID, x, eps = 0) %&gt;%
+    as_tibble() %&gt;%
+    dplyr::rename(FDR = padj) %&gt;%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, &quot;bonferroni&quot;),
+      DE = padj &lt; 0.05
+    ) %&gt;%
+    dplyr::arrange(pval)
+})</code></pre>
+<pre class="r"><code>dGsea_kg$EOfAD %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;KEGG_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched KEGG pathways for the EOfAD comparison&quot;,
+      &quot;using directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 2 enriched KEGG pathways for the EOfAD comparison using directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+CYTOKINE_CYTOKINE_RECEPTOR_INTERACTION
+</td>
+<td style="text-align:left;">
+131
+</td>
+<td style="text-align:left;">
+43
+</td>
+<td style="text-align:left;">
+1.82e-08
+</td>
+<td style="text-align:left;">
+3.39e-06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+CHEMOKINE_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+141
+</td>
+<td style="text-align:left;">
+43
+</td>
+<td style="text-align:left;">
+1.53e-04
+</td>
+<td style="text-align:left;">
+2.84e-02
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>dGsea_kg$fAI %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;KEGG_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched KEGG pathways for the fAI comparison&quot;,
+      &quot;using directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 10 enriched KEGG pathways for the fAI comparison using directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+CYTOKINE_CYTOKINE_RECEPTOR_INTERACTION
+</td>
+<td style="text-align:left;">
+131
+</td>
+<td style="text-align:left;">
+35
+</td>
+<td style="text-align:left;">
+7.99e-08
+</td>
+<td style="text-align:left;">
+1.49e-05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+RIBOSOME
+</td>
+<td style="text-align:left;">
+79
+</td>
+<td style="text-align:left;">
+66
+</td>
+<td style="text-align:left;">
+6.50e-06
+</td>
+<td style="text-align:left;">
+1.21e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+AXON_GUIDANCE
+</td>
+<td style="text-align:left;">
+132
+</td>
+<td style="text-align:left;">
+44
+</td>
+<td style="text-align:left;">
+1.26e-05
+</td>
+<td style="text-align:left;">
+2.35e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+CELL_ADHESION_MOLECULES_CAMS
+</td>
+<td style="text-align:left;">
+94
+</td>
+<td style="text-align:left;">
+54
+</td>
+<td style="text-align:left;">
+1.74e-05
+</td>
+<td style="text-align:left;">
+3.23e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+VIRAL_MYOCARDITIS
+</td>
+<td style="text-align:left;">
+54
+</td>
+<td style="text-align:left;">
+23
+</td>
+<td style="text-align:left;">
+3.83e-05
+</td>
+<td style="text-align:left;">
+7.13e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+TOLL_LIKE_RECEPTOR_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+70
+</td>
+<td style="text-align:left;">
+28
+</td>
+<td style="text-align:left;">
+3.87e-05
+</td>
+<td style="text-align:left;">
+7.20e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+JAK_STAT_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+97
+</td>
+<td style="text-align:left;">
+32
+</td>
+<td style="text-align:left;">
+5.11e-05
+</td>
+<td style="text-align:left;">
+9.51e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENDOCYTOSIS
+</td>
+<td style="text-align:left;">
+182
+</td>
+<td style="text-align:left;">
+55
+</td>
+<td style="text-align:left;">
+5.16e-05
+</td>
+<td style="text-align:left;">
+9.59e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+NATURAL_KILLER_CELL_MEDIATED_CYTOTOXICITY
+</td>
+<td style="text-align:left;">
+91
+</td>
+<td style="text-align:left;">
+42
+</td>
+<td style="text-align:left;">
+1.38e-04
+</td>
+<td style="text-align:left;">
+2.56e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+TYPE_II_DIABETES_MELLITUS
+</td>
+<td style="text-align:left;">
+43
+</td>
+<td style="text-align:left;">
+25
+</td>
+<td style="text-align:left;">
+1.65e-04
+</td>
+<td style="text-align:left;">
+3.07e-02
+</td>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+<div id="wikipathways" class="section level3">
+<h3>Wikipathways</h3>
+<pre class="r"><code>dGsea_wk &lt;- lapply(ranksWithSign, function(x){
+  fgseaMultilevel(wkByID, x, eps = 0) %&gt;%
+    as_tibble() %&gt;%
+    dplyr::rename(FDR = padj) %&gt;%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, &quot;bonferroni&quot;),
+      DE = padj &lt; 0.05
+    ) %&gt;%
+    dplyr::arrange(pval)
+})</code></pre>
+<pre class="r"><code>dGsea_wk$EOfAD %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;WP_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Wikipathways pathways for the EOfAD comparison&quot;,
+      &quot;using directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 2 enriched Wikipathways pathways for the EOfAD comparison using directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+CILIOPATHIES
+</td>
+<td style="text-align:left;">
+161
+</td>
+<td style="text-align:left;">
+54
+</td>
+<td style="text-align:left;">
+9.75e-06
+</td>
+<td style="text-align:left;">
+6.00e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+IL18_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+237
+</td>
+<td style="text-align:left;">
+71
+</td>
+<td style="text-align:left;">
+2.49e-05
+</td>
+<td style="text-align:left;">
+1.53e-02
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>dGsea_wk$fAI %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;WP_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Wikipathways pathways for the fAI comparison&quot;,
+      &quot;using directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 14 enriched Wikipathways pathways for the fAI comparison using directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+TYPE_II_INTERFERON_SIGNALING_IFNG
+</td>
+<td style="text-align:left;">
+38
+</td>
+<td style="text-align:left;">
+13
+</td>
+<td style="text-align:left;">
+9.30e-09
+</td>
+<td style="text-align:left;">
+5.72e-06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+PATHWAYS_REGULATING_HIPPO_SIGNALING
+</td>
+<td style="text-align:left;">
+93
+</td>
+<td style="text-align:left;">
+34
+</td>
+<td style="text-align:left;">
+1.17e-07
+</td>
+<td style="text-align:left;">
+7.19e-05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+HIPPOMERLIN_SIGNALING_DYSREGULATION
+</td>
+<td style="text-align:left;">
+109
+</td>
+<td style="text-align:left;">
+36
+</td>
+<td style="text-align:left;">
+4.28e-07
+</td>
+<td style="text-align:left;">
+2.63e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+VEGFAVEGFR2_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+432
+</td>
+<td style="text-align:left;">
+115
+</td>
+<td style="text-align:left;">
+4.88e-07
+</td>
+<td style="text-align:left;">
+3.00e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+INSULIN_SIGNALING
+</td>
+<td style="text-align:left;">
+165
+</td>
+<td style="text-align:left;">
+72
+</td>
+<td style="text-align:left;">
+9.64e-07
+</td>
+<td style="text-align:left;">
+5.93e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+EBOLA_VIRUS_PATHWAY_ON_HOST
+</td>
+<td style="text-align:left;">
+106
+</td>
+<td style="text-align:left;">
+53
+</td>
+<td style="text-align:left;">
+4.37e-06
+</td>
+<td style="text-align:left;">
+2.69e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+REGULATORY_CIRCUITS_OF_THE_STAT3_SIGNALING_PA
+</td>
+<td style="text-align:left;">
+71
+</td>
+<td style="text-align:left;">
+37
+</td>
+<td style="text-align:left;">
+7.89e-06
+</td>
+<td style="text-align:left;">
+4.86e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+HEPATITIS_B_INFECTION
+</td>
+<td style="text-align:left;">
+137
+</td>
+<td style="text-align:left;">
+46
+</td>
+<td style="text-align:left;">
+9.85e-06
+</td>
+<td style="text-align:left;">
+6.06e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SARSCOV2_INNATE_IMMUNITY_EVASION_AND_CELLSPEC
+</td>
+<td style="text-align:left;">
+44
+</td>
+<td style="text-align:left;">
+20
+</td>
+<td style="text-align:left;">
+1.37e-05
+</td>
+<td style="text-align:left;">
+8.42e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+SIGNALING_PATHWAYS_IN_GLIOBLASTOMA
+</td>
+<td style="text-align:left;">
+84
+</td>
+<td style="text-align:left;">
+41
+</td>
+<td style="text-align:left;">
+1.52e-05
+</td>
+<td style="text-align:left;">
+9.34e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+NEOVASCULARISATION_PROCESSES
+</td>
+<td style="text-align:left;">
+38
+</td>
+<td style="text-align:left;">
+21
+</td>
+<td style="text-align:left;">
+2.53e-05
+</td>
+<td style="text-align:left;">
+1.56e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+TOLLLIKE_RECEPTOR_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+71
+</td>
+<td style="text-align:left;">
+28
+</td>
+<td style="text-align:left;">
+4.20e-05
+</td>
+<td style="text-align:left;">
+2.58e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+NONGENOMIC_ACTIONS_OF_125_DIHYDROXYVITAMIN_D3
+</td>
+<td style="text-align:left;">
+66
+</td>
+<td style="text-align:left;">
+33
+</td>
+<td style="text-align:left;">
+6.79e-05
+</td>
+<td style="text-align:left;">
+4.17e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+REGULATION_OF_TOLLLIKE_RECEPTOR_SIGNALING_PAT
+</td>
+<td style="text-align:left;">
+102
+</td>
+<td style="text-align:left;">
+36
+</td>
+<td style="text-align:left;">
+7.50e-05
+</td>
+<td style="text-align:left;">
+4.61e-02
+</td>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+</div>
+<div id="non-directional-gsea" class="section level2">
+<h2>Non-directional GSEA</h2>
+<p>Similarly to the directional Gene Set Enrichment Analyses, testing was performed on the non-directional ranked list.</p>
+<div id="hallmark-1" class="section level3">
+<h3>Hallmark</h3>
+<pre class="r"><code>ndGsea_hm &lt;- lapply(ranksNoSign, function(x){
+  fgseaMultilevel(hmByID, x, eps = 0, scoreType = &quot;pos&quot;) %&gt;%
+    as_tibble() %&gt;%
+    dplyr::rename(FDR = padj) %&gt;%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, &quot;bonferroni&quot;),
+      DE = padj &lt; 0.05
+    ) %&gt;%
+    dplyr::arrange(pval)
+})</code></pre>
+<pre class="r"><code>ndGsea_hm$EOfAD %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;HALLMARK_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Hallmark pathways for the EOfAD comparison&quot;,
+      &quot;using non-directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 3 enriched Hallmark pathways for the EOfAD comparison using non-directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+INTERFERON_GAMMA_RESPONSE
+</td>
+<td style="text-align:left;">
+168
+</td>
+<td style="text-align:left;">
+56
+</td>
+<td style="text-align:left;">
+6.24e-08
+</td>
+<td style="text-align:left;">
+3.12e-06
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+INTERFERON_ALPHA_RESPONSE
+</td>
+<td style="text-align:left;">
+76
+</td>
+<td style="text-align:left;">
+28
+</td>
+<td style="text-align:left;">
+3.41e-07
+</td>
+<td style="text-align:left;">
+1.71e-05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ALLOGRAFT_REJECTION
+</td>
+<td style="text-align:left;">
+159
+</td>
+<td style="text-align:left;">
+44
+</td>
+<td style="text-align:left;">
+8.20e-04
+</td>
+<td style="text-align:left;">
+4.10e-02
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>ndGsea_hm$fAI %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;HALLMARK_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Hallmark pathways for the fAI comparison&quot;,
+      &quot;using non-directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 0 enriched Hallmark pathways for the fAI comparison using non-directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+<div id="kegg-1" class="section level3">
+<h3>KEGG</h3>
+<pre class="r"><code>ndGsea_kg &lt;- lapply(ranksNoSign, function(x){
+  fgseaMultilevel(kgByID, x, eps = 0, scoreType = &quot;pos&quot;) %&gt;%
+    as_tibble() %&gt;%
+    dplyr::rename(FDR = padj) %&gt;%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, &quot;bonferroni&quot;),
+      DE = padj &lt; 0.05
+    ) %&gt;%
+    dplyr::arrange(pval)
+})</code></pre>
+<pre class="r"><code>ndGsea_kg$EOfAD %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;KEGG_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched KEGG pathways for the EOfAD comparison&quot;,
+      &quot;using non-directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 1 enriched KEGG pathways for the EOfAD comparison using non-directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+CYTOKINE_CYTOKINE_RECEPTOR_INTERACTION
+</td>
+<td style="text-align:left;">
+131
+</td>
+<td style="text-align:left;">
+42
+</td>
+<td style="text-align:left;">
+1.02e-05
+</td>
+<td style="text-align:left;">
+1.90e-03
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>ndGsea_kg$fAI %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;KEGG_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched KEGG pathways for the fAI comparison&quot;,
+      &quot;using non-directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 1 enriched KEGG pathways for the fAI comparison using non-directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+NOTCH_SIGNALING_PATHWAY
+</td>
+<td style="text-align:left;">
+39
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+4.46e-06
+</td>
+<td style="text-align:left;">
+8.29e-04
+</td>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+<div id="wikipathways-1" class="section level3">
+<h3>Wikipathways</h3>
+<pre class="r"><code>ndGsea_wk &lt;- lapply(ranksNoSign, function(x){
+  fgseaMultilevel(wkByID, x, eps = 0, scoreType = &quot;pos&quot;) %&gt;%
+    as_tibble() %&gt;%
+    dplyr::rename(FDR = padj) %&gt;%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, &quot;bonferroni&quot;),
+      DE = padj &lt; 0.05
+    ) %&gt;%
+    dplyr::arrange(pval)
+})</code></pre>
+<pre class="r"><code>ndGsea_wk$EOfAD %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;WP_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Wikipathways pathways for the EOfAD comparison&quot;,
+      &quot;using non-directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 2 enriched Wikipathways pathways for the EOfAD comparison using non-directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+STRIATED_MUSCLE_CONTRACTION_PATHWAY
+</td>
+<td style="text-align:left;">
+40
+</td>
+<td style="text-align:left;">
+14
+</td>
+<td style="text-align:left;">
+1.15e-05
+</td>
+<td style="text-align:left;">
+7.05e-03
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+COMPLEMENT_ACTIVATION
+</td>
+<td style="text-align:left;">
+15
+</td>
+<td style="text-align:left;">
+8
+</td>
+<td style="text-align:left;">
+2.78e-05
+</td>
+<td style="text-align:left;">
+1.71e-02
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>ndGsea_wk$fAI %&gt;%
+  dplyr::filter(DE) %&gt;%
+  mutate(
+    Pathway = str_remove(pathway, &quot;WP_&quot;),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, &quot;Up&quot;, &quot;Down&quot;),
+    PValue = formatC(pval, digits = 2, format = &quot;e&quot;),
+    FDR = formatC(padj, digits = 2, format = &quot;e&quot;),
+  ) %&gt;%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste(
+      &quot;The&quot;, nrow(.), &quot;enriched Wikipathways pathways for the fAI comparison&quot;,
+      &quot;using non-directional rankings and a threshold of FDR &lt; 0.05.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+The 1 enriched Wikipathways pathways for the fAI comparison using non-directional rankings and a threshold of FDR &lt; 0.05.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Pathway
+</th>
+<th style="text-align:left;">
+Size
+</th>
+<th style="text-align:left;">
+Edge size
+</th>
+<th style="text-align:left;">
+PValue
+</th>
+<th style="text-align:left;">
+FDR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+CANONICAL_AND_NONCANONICAL_NOTCH_SIGNALING
+</td>
+<td style="text-align:left;">
+25
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:left;">
+5.75e-07
+</td>
+<td style="text-align:left;">
+3.53e-04
+</td>
+</tr>
+</tbody>
+</table>
+<hr />
+</div>
+</div>
+</div>
+<div id="leading-edge-genes" class="section level1">
+<h1>Leading edge genes</h1>
+<p>It was noted previously that a large proprtion of DE genes were located on the same chromosome as the mutation. It was therefore posited that the compensatory genetic responses triggered by a mutation may originate from nearby the disrupted gene. If this is true, genes involved in similar functional pathways may be located within a close genetic distance. This would make sense from an evolutionary point of view because it would allow advantageous allelic combinations to remain together due to their low chance for recombination.</p>
+<p>To test this idea, the leading edge genes from significantly enriched pathways were tested for enrichment of localisation on chromosome 17, the same chromosome as <em>psen1</em>.</p>
+<div id="directional" class="section level2">
+<h2>Directional</h2>
+<pre class="r"><code>dEdgeGenes_hm &lt;- lapply(dGsea_hm, function(x){
+  x %&gt;%
+    dplyr::filter(DE) %&gt;%
+    with(structure(leadingEdge, names = pathway))
+})
+dEdgeGenes_hm &lt;- dEdgeGenes_hm[sapply(dEdgeGenes_hm, length) &gt; 0]
+dEdgeGenes_kg &lt;- lapply(dGsea_kg, function(x){
+  x %&gt;%
+    dplyr::filter(DE) %&gt;%
+    with(structure(leadingEdge, names = pathway))
+})
+dEdgeGenes_kg &lt;- dEdgeGenes_kg[sapply(dEdgeGenes_kg, length) &gt; 0]
+dEdgeGenes_wk &lt;- lapply(dGsea_wk, function(x){
+  x %&gt;%
+    dplyr::filter(DE) %&gt;%
+    with(structure(leadingEdge, names = pathway))
+})
+dEdgeGenes_wk &lt;- dEdgeGenes_wk[sapply(dEdgeGenes_wk, length) &gt; 0]</code></pre>
+<pre class="r"><code>dFishTabs_hm &lt;- lapply(dEdgeGenes_hm, function(x){
+  lapply(x, function(y){
+    geneChrs %&gt;%
+      mutate(
+        isLeadingEdge = gene_id %in% y,
+        isMutantChr = chromosome == 17
+      ) %&gt;%
+      with(table(isLeadingEdge, isMutantChr))
+  })
+})
+dFishRes_hm &lt;- lapply(dFishTabs_hm, function(x){
+  lapply(seq_along(x), function(y){
+    name = names(x[y])
+    fisher.test(x[[y]]) %&gt;%
+      with(tibble(pathway = name, p.value = p.value))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    mutate(fdr = p.adjust(p.value, method = &quot;fdr&quot;))
+})
+dFishRes_hm &lt;- lapply(seq_along(dFishRes_hm), function(x){
+  dFishRes_hm[[x]] %&gt;%
+    left_join(dGsea_hm[[x]][,c(&quot;pathway&quot;, &quot;size&quot;, &quot;edgeSize&quot;)])
+}) %&gt;%
+  set_names(names(dFishRes_hm))</code></pre>
+<pre class="r"><code>dFishTabs_kg &lt;- lapply(dEdgeGenes_kg, function(x){
+  lapply(x, function(y){
+    geneChrs %&gt;%
+      mutate(
+        isLeadingEdge = gene_id %in% y,
+        isMutantChr = chromosome == 17
+      ) %&gt;%
+      with(table(isLeadingEdge, isMutantChr))
+  })
+})
+dFishRes_kg &lt;- lapply(dFishTabs_kg, function(x){
+  lapply(seq_along(x), function(y){
+    name = names(x[y])
+    fisher.test(x[[y]]) %&gt;%
+      with(tibble(pathway = name, p.value = p.value))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    mutate(fdr = p.adjust(p.value, method = &quot;fdr&quot;))
+})
+dFishRes_kg &lt;- lapply(seq_along(dFishRes_kg), function(x){
+  dFishRes_kg[[x]] %&gt;%
+    left_join(dGsea_kg[[x]][,c(&quot;pathway&quot;, &quot;size&quot;, &quot;edgeSize&quot;)])
+}) %&gt;%
+  set_names(names(dFishRes_kg))</code></pre>
+<pre class="r"><code>dFishTabs_wk &lt;- lapply(dEdgeGenes_wk, function(x){
+  lapply(x, function(y){
+    geneChrs %&gt;%
+      mutate(
+        isLeadingEdge = gene_id %in% y,
+        isMutantChr = chromosome == 17
+      ) %&gt;%
+      with(table(isLeadingEdge, isMutantChr))
+  })
+})
+dFishRes_wk &lt;- lapply(dFishTabs_wk, function(x){
+  lapply(seq_along(x), function(y){
+    name = names(x[y])
+    fisher.test(x[[y]]) %&gt;%
+      with(tibble(pathway = name, p.value = p.value))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    mutate(fdr = p.adjust(p.value, method = &quot;fdr&quot;))
+})
+dFishRes_wk &lt;- lapply(seq_along(dFishRes_wk), function(x){
+  dFishRes_wk[[x]] %&gt;%
+    left_join(dGsea_wk[[x]][,c(&quot;pathway&quot;, &quot;size&quot;, &quot;edgeSize&quot;)])
+}) %&gt;%
+  set_names(names(dFishRes_wk))</code></pre>
+<p>For each significantly enriched pathway, the entire set of detected genes were classified as belonging to the pathway’s leading edge group and/or being located on chromosome 17. This was represented as a 2x2 contingency table ready for further enrichment testing using Fisher’s exact test. An example of a contingency table for the signifcantly enriched “Hallmark Oxidative Phosphorylation” pathway for the EOfAD genotype is shown below.</p>
+<center>
+<pre class="r"><code>contExample &lt;- dFishTabs_hm$EOfAD$HALLMARK_OXIDATIVE_PHOSPHORYLATION
+dimnames(contExample) &lt;- list(
+  isLeadingEdge = c(&quot;Not leading edge&quot;, &quot;Leading edge&quot;),
+  isMutantChr = c(&quot;Not chr17&quot;, &quot;chr17&quot;)
+)
+pander(contExample)</code></pre>
+<table style="width:60%;">
+<colgroup>
+<col width="31%" />
+<col width="16%" />
+<col width="11%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="center"> </th>
+<th align="center">Not chr17</th>
+<th align="center">chr17</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="center"><strong>Not leading edge</strong></td>
+<td align="center">36024</td>
+<td align="center">1115</td>
+</tr>
+<tr class="even">
+<td align="center"><strong>Leading edge</strong></td>
+<td align="center">97</td>
+<td align="center">5</td>
+</tr>
+</tbody>
+</table>
+</center>
+<p>No sets of leading edge genes for significantly enriched pathways using directional ranks were classified as enriched for being located on chromosome 17.</p>
+</div>
+<div id="non-directional" class="section level2">
+<h2>Non-directional</h2>
+<pre class="r"><code>ndEdgeGenes_hm &lt;- lapply(ndGsea_hm, function(x){
+  if (length(x) &gt; 0) {
+    x %&gt;%
+      dplyr::filter(DE) %&gt;%
+      with(structure(leadingEdge, names = pathway))
+  } else {
+    NULL
+  }
+})
+ndEdgeGenes_hm &lt;- ndEdgeGenes_hm[sapply(ndEdgeGenes_hm, length) &gt; 0]
+ndEdgeGenes_kg &lt;- lapply(ndGsea_kg, function(x){
+  x %&gt;%
+    dplyr::filter(DE) %&gt;%
+    with(structure(leadingEdge, names = pathway))
+})
+ndEdgeGenes_kg &lt;- ndEdgeGenes_kg[sapply(ndEdgeGenes_kg, length) &gt; 0]
+ndEdgeGenes_wk &lt;- lapply(ndGsea_wk, function(x){
+  x %&gt;%
+    dplyr::filter(DE) %&gt;%
+    with(structure(leadingEdge, names = pathway))
+})
+ndEdgeGenes_wk &lt;- ndEdgeGenes_wk[sapply(ndEdgeGenes_wk, length) &gt; 0]</code></pre>
+<pre class="r"><code>ndFishTabs_hm &lt;- lapply(ndEdgeGenes_hm, function(x){
+  lapply(x, function(y){
+    geneChrs %&gt;%
+      mutate(
+        isLeadingEdge = gene_id %in% y,
+        isMutantChr = chromosome == 17
+      ) %&gt;%
+      with(table(isLeadingEdge, isMutantChr))
+  })
+})
+ndFishRes_hm &lt;- lapply(ndFishTabs_hm, function(x){
+  lapply(seq_along(x), function(y){
+    name = names(x[y])
+    fisher.test(x[[y]]) %&gt;%
+      with(tibble(pathway = name, p.value = p.value))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    mutate(fdr = p.adjust(p.value, method = &quot;fdr&quot;))
+})
+ndFishRes_hm &lt;- lapply(seq_along(ndFishRes_hm), function(x){
+  ndFishRes_hm[[x]] %&gt;%
+    left_join(ndGsea_hm[[x]][,c(&quot;pathway&quot;, &quot;size&quot;, &quot;edgeSize&quot;)])
+}) %&gt;%
+  set_names(names(ndFishRes_hm))</code></pre>
+<pre class="r"><code>ndFishTabs_kg &lt;- lapply(ndEdgeGenes_kg, function(x){
+  lapply(x, function(y){
+    geneChrs %&gt;%
+      mutate(
+        isLeadingEdge = gene_id %in% y,
+        isMutantChr = chromosome == 17
+      ) %&gt;%
+      with(table(isLeadingEdge, isMutantChr))
+  })
+})
+ndFishRes_kg &lt;- lapply(ndFishTabs_kg, function(x){
+  lapply(seq_along(x), function(y){
+    name = names(x[y])
+    fisher.test(x[[y]]) %&gt;%
+      with(tibble(pathway = name, p.value = p.value))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    mutate(fdr = p.adjust(p.value, method = &quot;fdr&quot;))
+})
+ndFishRes_kg &lt;- lapply(seq_along(ndFishRes_kg), function(x){
+  ndFishRes_kg[[x]] %&gt;%
+    left_join(ndGsea_kg[[x]][,c(&quot;pathway&quot;, &quot;size&quot;, &quot;edgeSize&quot;)])
+}) %&gt;%
+  set_names(names(ndFishRes_kg))</code></pre>
+<pre class="r"><code>ndFishTabs_wk &lt;- lapply(ndEdgeGenes_wk, function(x){
+  lapply(x, function(y){
+    geneChrs %&gt;%
+      mutate(
+        isLeadingEdge = gene_id %in% y,
+        isMutantChr = chromosome == 17
+      ) %&gt;%
+      with(table(isLeadingEdge, isMutantChr))
+  })
+})
+ndFishRes_wk &lt;- lapply(ndFishTabs_wk, function(x){
+  lapply(seq_along(x), function(y){
+    name = names(x[y])
+    fisher.test(x[[y]]) %&gt;%
+      with(tibble(pathway = name, p.value = p.value))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    mutate(fdr = p.adjust(p.value, method = &quot;fdr&quot;))
+})
+ndFishRes_wk &lt;- lapply(seq_along(ndFishRes_wk), function(x){
+  ndFishRes_wk[[x]] %&gt;%
+    left_join(ndGsea_wk[[x]][,c(&quot;pathway&quot;, &quot;size&quot;, &quot;edgeSize&quot;)])
+}) %&gt;%
+  set_names(names(ndFishRes_wk))</code></pre>
+<p>Similarly to significantly enriched pathways using directional ranks, no sets of leading edge genes were classified as enriched for being located on chromosome 17.</p>
+</div>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

@@ -30,14 +30,22 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```{r packages}
 suppressPackageStartupMessages({
+  ## Common
   library(tidyverse)
   library(magrittr)
-  library(parallel)
+  library(future.apply)
   library(here)
   library(AnnotationHub)
   library(purrr)
   library(scales)
   library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
   library(UpSetR)
   library(SeqArray)
 })
@@ -46,7 +54,7 @@ suppressPackageStartupMessages({
 ```{r options}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
-cores <- detectCores() - 1
+cores <- availableCores() - 1
 ```
 
 ```{r}
@@ -236,9 +244,9 @@ The data in this analysis was generated with the following options:
 - `--min-mapping-quality 10`
 - `--min-base-quality 20`
 - `--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE`
-    - Ths option counts all fragments where the base is consistent when mate pairs overlap.
+- Ths option counts all fragments where the base is consistent when mate pairs overlap.
 - `--min-depth-of-non-filtered-base -1`
-    - This argument is disabled, because depth filtering was performed manually (see next section).
+- This argument is disabled, because depth filtering was performed manually (see next section).
 
 Heterozygous SNVs detected by `ASEReadCounter` were recorded in separate `tsv` files for each sample. 
 These were loaded into R as a list of tibbles containing the unprocessed raw data for ASE analysis.

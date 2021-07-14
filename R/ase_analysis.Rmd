@@ -30,25 +30,31 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 ```{r packages}
 suppressPackageStartupMessages({
+  ## Common
   library(tidyverse)
   library(magrittr)
-  library(parallel)
+  library(future.apply)
   library(here)
   library(AnnotationHub)
   library(purrr)
   library(scales)
   library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
   library(statmod)
   library(fgsea)
-  library(tictoc)
-  library(future.apply)
 })
 ```
 
 ```{r options}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
-cores <- detectCores() - 2
+cores <- availableCores() - 2
 ```
 
 ```{r}
@@ -297,40 +303,29 @@ file_nd <- paste0(
 
 ```{r}
 ## This code chunk has a lengthy run-time and will not run if the object has already been saved
-## Due to its large size it will remain on the HPC system
-## Across 6 threads it takes up to 3 hours to complete
+## Due to its large size the object remains on the HPC system
+## Across 6 threads it takes 1-2 hours to complete
 if (!file.exists(file_nd)) {
-  plan(tweak(multisession, workers = cores))
-  ranks_nd <- future_sapply(
-    1:perms,
-    function(...){sapply(topASE, permRanks_nd)},
-    future.seed = 17
-  ) %>%
+  plan(list(tweak(multisession, workers = cores), sequential))
+  
+  ranks_nd <- future_sapply(1:perms, function(...){
+    future_sapply(topASE, permRanks_nd, future.seed = 17)
+  }, future.seed = 17) %>%
     t() %>%
     as_tibble()
-  
-  plan(list(tweak(multisession, workers = cores), sequential))
-  fgsea_nd <- future_lapply(
-    as.list(ranks_nd),
-    function(x){
-      future_lapply(
-        x,
-        function(y){
-          fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-        },
-        future.seed = 17
-      )
-    },
-    future.seed = 17
-  ) %>%
+  fgsea_nd <- future_lapply(as.list(ranks_nd), function(x){
+    future_lapply(x, function(y){
+      fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+    }, future.seed = 17)
+  }, future.seed = 17) %>%
     set_names(colnames(ranks_nd))
-  
   saveRDS(fgsea_nd, file_nd)
+  
   plan(sequential)
 }
 ```
 
-```{r, eval=false, include=FALSE}
+```{r, eval=FALSE, include=FALSE}
 # perms <- 500
 # file_nd <- paste0(here(), "/files/fgsea_nd_", perms, "perms.Rds")
 # if (!file.exists(file_nd)) {
@@ -486,39 +481,29 @@ file_d <- paste0(
 ```
 
 ```{r}
+## This code chunk has a lengthy run-time and will not run if the object has already been saved
+## Due to its large size the object remains on the HPC system
+## Across 6 threads it takes 1-2 hours to complete
 if (!file.exists(file_d)) {
-  plan(tweak(multisession, workers = 6))
-  ranks_d <- future_sapply(
-    1:perms,
-    function(...){
-      sapply(
-        topASE[str_detect(names(topASE), "(fAD|fAI)")],
-        permRanks_d
-      )
-    },
-    future.seed = 17
-  ) 
-  ranks_d <- ranks_d %>%
+  plan(list(tweak(multisession, workers = 6), sequential))
+  
+  ranks_d <- future_sapply(1:perms, function(...){
+    future_sapply(
+      topASE[str_detect(names(topASE), "(fAD|fAI)")],
+      permRanks_d,
+      future.seed = 17
+    )
+  }, future.seed = 17) %>%
     t() %>%
     as_tibble()
-  
-  plan(list(tweak(multisession, workers = cores), sequential))
-  fgsea_d <- future_lapply(
-    as.list(ranks_d),
-    function(x){
-      future_lapply(
-        x, 
-        function(y){
-          fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-        },
-        future.seed = 17
-      )
-    },
-    future.seed = 17
-  ) %>%
+  fgsea_d <- future_lapply(as.list(ranks_d), function(x){
+    future_lapply(x, function(y){
+      fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+    }, future.seed = 17)
+  }, future.seed = 17) %>%
     set_names(colnames(ranks_d))
-  
   saveRDS(fgsea_d, file_d)
+  
   plan(sequential)
 }
 ```
@@ -555,7 +540,7 @@ if (!file.exists(file_d)) {
 ```
 
 ```{r}
-fgsea_d <- readRDS(here("files/fgsea_d.Rds"))
+fgsea_d <- readRDS(file_d)
 ```
 
 ```{r}

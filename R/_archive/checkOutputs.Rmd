@@ -1,0 +1,222 @@
+---
+title: "eQTL exploration"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Setup 
+
+```{r packages}
+library(tidyverse)
+library(magrittr)
+library(parallel)
+library(here)
+library(SeqArray)
+library(AnnotationHub)
+library(purrr)
+library(ggpubr)
+```
+
+```{r options}
+if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores <- detectCores() - 2
+```
+
+## Annotation
+
+```{r}
+ah <- AnnotationHub() %>%
+  subset(species == "Danio rerio") %>%
+  subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH83189"]] ## Ens101
+genes <- genes(ensDb)
+mcols(genes) <- mcols(genes)[
+  c("gene_id", "gene_name", "gene_biotype", "entrezid")
+]
+exons <- exonsBy(ensDb, by = "gene")
+```
+
+# Gene regions of interest
+
+```{r}
+sym <- "psen1"
+drChrs <- seq(1:25)
+# drChrs <- paste(c(1:25))
+geneId <- genes %>%
+  subset(seqnames %in% drChrs) %>%
+  subset(gene_name == sym) %>%
+  .$gene_id
+eoi <- exons[[geneId]]
+```
+
+```{r}
+chr <- seqnames(eoi) %>%
+  unique() %>%
+  as.character() %>%
+  as.numeric()
+ranges <- ranges(eoi) %>% 
+  as.data.frame() %>% 
+  pmap(function(start, end, ...){seq(start, end)}) %>%
+  unlist() %>%
+  unique()
+```
+
+# HaplotypeCaller output
+
+```{r}
+vcfPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/13_selectVariants/mergedVcf/mergedVcf.vcf.gz"
+gdsPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/13_selectVariants/gds/mergedGds.gds"
+makeGds <-!file.exists(gdsPath)
+if (makeGds) {
+  dir.create(dirname(gdsPath))
+  seqVCF2GDS(vcfPath, gdsPath)
+}
+gds <- seqOpen(gdsPath, readonly = FALSE)
+```
+
+```{r}
+samples <- seqGetData(gds, "sample.id") %>%
+  sort() ## Sort in same order as list.files
+## Get variants IDs that lie only in exons
+seqSetFilter(gds, eoi)
+vIds <- seqGetData(gds, "variant.id")
+seqResetFilter(gds)
+nucCols <- tibble(A = NA, C = NA, G = NA, T = NA)
+```
+
+```{r}
+seqResetFilter(gds)
+snps <- tibble(
+  variant.id = seqGetData(gds, "variant.id"),
+  chromosome = seqGetData(gds, "chromosome"),
+  position = seqGetData(gds, "position"),
+  allele = seqGetData(gds, "allele")
+) %>%
+  dplyr::filter(chromosome %in% drChrs) %>%
+  as_tibble()
+```
+
+```{r}
+hcCounts <-lapply(samples, function(sample){
+  sampleSel <- samples == sample
+  lapply(vIds, function(vId){
+    seqResetFilter(gds)
+    seqSetFilter(gds, variant.sel = vId, sample.sel = sampleSel)
+    als <- seqGetData(gds, "allele") %>%
+      str_split(",") %>% 
+      unlist()
+    seqGetData(gds, "annotation/format/AD")$data %>%
+      t() %>%
+      rowSums(na.rm = TRUE) %>%
+      set_names(als) %>%
+      bind_rows() %>%
+      mutate(variant.id = vId)
+  }) %>%
+    purrr::reduce(full_join) %>%
+    add_column(!!!nucCols[!names(nucCols) %in% names(.)]) %>%
+    left_join(snps, by = "variant.id") %>%
+    dplyr::select(
+      chromosome, position, allele, 
+      A, C, G, T
+    ) %>%
+    mutate(sample = sample)
+})
+```
+
+# CollectAllelicCounts output
+
+```{r}
+files <- list.files("/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/14_countAlleles/counts", full.names = TRUE)
+cacRaw <- lapply(files, function(file){
+  sample <- basename(file) %>%
+    str_remove(".alleleCounts.tsv")
+  read_tsv(file) %>%
+    mutate(sample = sample)
+})
+```
+
+```{r}
+cacCounts <- lapply(cacRaw, function(x){
+  x %>%
+    dplyr::filter(
+      CONTIG == chr,
+      POSITION %in% ranges
+    ) %>%
+    mutate(
+      allele = paste0(REF_NUCLEOTIDE, ",", ALT_NUCLEOTIDE),
+      CONTIG = as.character(CONTIG)
+    ) %>%
+    pivot_longer(
+      cols = c("REF_NUCLEOTIDE", "ALT_NUCLEOTIDE"),
+      names_to = "variant",
+      values_to = "base"
+    ) %>% 
+    mutate(value = ifelse(variant == "REF_NUCLEOTIDE", REF_COUNT, ALT_COUNT)) %>%
+    dplyr::select(-variant) %>%
+    pivot_wider(names_from = base, values_from = value) %>%
+    dplyr::select(chromosome = CONTIG, position = POSITION, allele, A, C, G, T, sample)
+})
+```
+
+# ASEReadCounter output
+
+```{r}
+files <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/15_aseReadCounts",
+  full.names = TRUE
+)
+arcRaw <- lapply(files, function(file){
+  sample <- basename(file) %>%
+    str_remove(".tsv")
+  read_tsv(
+    file,
+    col_types = "cdcccdddddddd"
+  ) %>%
+    mutate(sample = sample) %>%
+    dplyr::filter(contig %in% as.character(drChrs))
+})
+```
+
+```{r}
+arcCounts <- lapply(arcRaw, function(x){
+  x %>%
+    dplyr::filter(
+      contig == chr,
+      position %in% ranges
+    ) %>%
+    mutate(allele = paste0(refAllele, ",", altAllele)) %>%
+    pivot_longer(
+      cols = c("refAllele", "altAllele"),
+      names_to = "variant",
+      values_to = "base"
+    ) %>% 
+    mutate(value = ifelse(variant == "refAllele", refCount, altCount)) %>%
+    dplyr::select(-variant) %>%
+    pivot_wider(names_from = base, values_from = value) %>%
+    add_column(!!!nucCols[!names(nucCols) %in% names(.)]) %>%
+    dplyr::select(chromosome = contig, position, allele, A, C, G, T, sample)
+})
+```

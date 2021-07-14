@@ -1,0 +1,1969 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Lachlan Baer" />
+
+
+<title>Allele Specific Expression Quality Control</title>
+
+<script src="site_libs/header-attrs-2.9/header-attrs.js"></script>
+<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">210408_psen1_fADfAI_snv</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="de_analysis.html">DE analysis</a>
+</li>
+<li>
+  <a href="de_enrichment.html">DE enrichment</a>
+</li>
+<li>
+  <a href="ase_qc.html">ASE QC</a>
+</li>
+<li>
+  <a href="ase_analysis.html">ASE analysis</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        <li>
+  <a href="https://github.com/baerlachlan/210408_psen1_fADfAI_snv">
+    <span class="fa fa-github"></span>
+     
+  </a>
+</li>
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Allele Specific Expression Quality Control</h1>
+<h4 class="author">Lachlan Baer</h4>
+<h4 class="date">14 July, 2021</h4>
+
+</div>
+
+
+<div id="setup" class="section level1">
+<h1>Setup</h1>
+<pre class="r"><code>suppressPackageStartupMessages({
+  ## Common
+  library(tidyverse)
+  library(magrittr)
+  library(future.apply)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
+  library(UpSetR)
+  library(SeqArray)
+})</code></pre>
+<pre class="r"><code>if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores &lt;- availableCores() - 1</code></pre>
+<pre class="r"><code>source(here(&quot;R/lbFuncs.R&quot;))</code></pre>
+<div id="ensdb" class="section level2">
+<h2>EnsDb</h2>
+<pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
+  subset(species == &quot;Danio rerio&quot;) %&gt;%
+  subset(rdataclass == &quot;EnsDb&quot;)
+ensDb &lt;- ah[[&quot;AH83189&quot;]] ## Ens101
+genes &lt;- genes(ensDb)
+mcols(genes) &lt;- mcols(genes)[
+  c(&quot;gene_id&quot;, &quot;gene_name&quot;, &quot;gene_biotype&quot;, &quot;entrezid&quot;)
+]
+exons &lt;- exonsBy(ensDb, by = &quot;gene&quot;)</code></pre>
+<p>An <code>EnsDb</code> object for Ensemble release 101 was setup for extracting gene and exon annotation information.</p>
+</div>
+<div id="metadata" class="section level2">
+<h2>Metadata</h2>
+<pre class="r"><code>metadata &lt;- read_csv(here(&quot;files/samples.csv&quot;)) %&gt;%
+  dplyr::select(-sample) %&gt;%
+  dplyr::rename(sample = basename, genotype = Genotype)
+metadata %&gt;%
+  dplyr::rename(
+    Sample = sample, `Fish ID` = fish_id, `Batch Killed` = batch_killed,
+    `Genotype 1` = genotype, `Genotype 2` = Genotype_2
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = &quot;Sample metadata&quot;
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+Sample metadata
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Sample
+</th>
+<th style="text-align:left;">
+Fish ID
+</th>
+<th style="text-align:left;">
+Batch Killed
+</th>
+<th style="text-align:left;">
+Sex
+</th>
+<th style="text-align:left;">
+RINe
+</th>
+<th style="text-align:left;">
+Genotype 1
+</th>
+<th style="text-align:left;">
+Genotype 2
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+7_KB_B12
+</td>
+<td style="text-align:left;">
+27
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.3
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+22_KB_C6
+</td>
+<td style="text-align:left;">
+30
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+16_KB_C12
+</td>
+<td style="text-align:left;">
+40
+</td>
+<td style="text-align:left;">
+8
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.4
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+8_KB_B3
+</td>
+<td style="text-align:left;">
+46
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.2
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+19_KB_C3
+</td>
+<td style="text-align:left;">
+29
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.5
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+10_KB_B6
+</td>
+<td style="text-align:left;">
+50
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.3
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+4_KB_A6
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+3
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.0
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+T428del/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+2_KB_A11
+</td>
+<td style="text-align:left;">
+12
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+8.7
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+12_KB_B8
+</td>
+<td style="text-align:left;">
+22
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.3
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+15_KB_C11
+</td>
+<td style="text-align:left;">
+45
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.4
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+18_KB_C2
+</td>
+<td style="text-align:left;">
+47
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.2
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+9_KB_B5
+</td>
+<td style="text-align:left;">
+21
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.4
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+6_KB_B11
+</td>
+<td style="text-align:left;">
+26
+</td>
+<td style="text-align:left;">
+6
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.4
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+24_KB_C8
+</td>
+<td style="text-align:left;">
+44
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.8
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+21_KB_C5
+</td>
+<td style="text-align:left;">
+49
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.5
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+W233fs/+
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+5_KB_A7
+</td>
+<td style="text-align:left;">
+19
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.1
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+1_KB_A10
+</td>
+<td style="text-align:left;">
+25
+</td>
+<td style="text-align:left;">
+5
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.4
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+23_KB_C7
+</td>
+<td style="text-align:left;">
+36
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+3_KB_A1
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+9.4
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+17_KB_C1
+</td>
+<td style="text-align:left;">
+34
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.0
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+20_KB_C4
+</td>
+<td style="text-align:left;">
+35
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.3
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+14_KB_C10
+</td>
+<td style="text-align:left;">
+37
+</td>
+<td style="text-align:left;">
+8
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.3
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+13_KB_B9
+</td>
+<td style="text-align:left;">
+54
+</td>
+<td style="text-align:left;">
+10
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.3
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+11_KB_B7
+</td>
+<td style="text-align:left;">
+55
+</td>
+<td style="text-align:left;">
+10
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9.1
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+WT
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>fad &lt;- metadata %&gt;%
+  dplyr::filter(genotype == &quot;EOfAD-like/+&quot;) %&gt;%
+  pull(sample)
+fai &lt;- metadata %&gt;%
+  dplyr::filter(genotype == &quot;fAI-like/+&quot;) %&gt;%
+  pull(sample)
+wt &lt;- metadata %&gt;%
+  dplyr::filter(genotype == &quot;WT&quot;) %&gt;%
+  pull(sample)
+drChrs &lt;- seq(1:25)</code></pre>
+</div>
+</div>
+<div id="quality-control" class="section level1">
+<h1>Quality control</h1>
+<p>There are a number of important quality control measures that must be taken to ensure reliable data for allele specific expression (ASE) testing. The following procedures are based around the guidelines described in <a href="https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf">Castel et al. Tools and Best Practices for allelic expression analysis.</a></p>
+<div id="wasp" class="section level2">
+<h2>WASP</h2>
+<p>An important aspect to consider in ASE analysis is the potential for read mapping bias. For RNA-seq data mapped to a reference genome, reads that carry an alternate allele at positions of variation have at least one mismatch, and therefore a lower probability of aligning correctly than reads containing the reference allele.</p>
+<p><code>WASP</code> provides a suite of tools for unbiased allele-specific read mapping. The <code>WASP</code> workflow for mappability filtering is defined by 5 steps:</p>
+<ol style="list-style-type: decimal">
+<li>Reads are mapped normally with the user’s mapper of choice (<code>STAR</code> was chosen in this case).</li>
+<li>Reads that overlap identified SNVs and therefore may have mapping bias are determined using <code>find_intersecting_snps.py</code> script. Each overlapping read is output as a set of synthetic reads in <code>FASTQ</code> format with its allele swapped to to the other allele at the SNV site.</li>
+<li>The set of allele-swapped reads are re-mapped using the same method and options used in step 1.</li>
+<li>Reads where one or more allelic versions fail to map back to the same location are removed using <code>filter_remapped_reads.py</code> script.</li>
+<li>Reads that did not overlap SNVs are merged with those that show unbiased mapping from step 4 using <code>samtools</code>, resulting in a complete set of mappability-filtered aligned reads in <code>BAM</code> format.</li>
+</ol>
+<p>To begin the <code>WASP</code> fltering procedure, input files containing genetic variants (SNVs) previously identified by the <code>GATK</code> workflow are needed. Since we do not have phasing information, it is recommended to use text-based format opposed to <code>HDF5</code> for the input files. The text-based input files require three space-delimited columns (position, ref_allele, alt_allele), and one input file per chromosome. The filenames must follow the convention <code>&lt;chr&gt;.snps.txt.gz</code> (e.g <code>1.snps.txt.gz</code> for chromosome 1).</p>
+<p>To gather SNV information called by the <code>GATK</code> workflow, the <code>VCF</code> files were firstly converted into <code>GDS</code> objects. <code>GDS</code> objects allow for easy access of the data in <code>R</code>, but are large so were kept on the HPC system.</p>
+<pre class="r"><code>vcfPaths &lt;- list.files(
+  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/09_callSnvs/selected&quot;,
+  pattern = &quot;.vcf.gz$&quot;,
+  full.names = TRUE
+)
+lapply(vcfPaths, function(vcf){
+  gdsPath &lt;- paste0(
+    str_remove(dirname(vcf), &quot;selected&quot;),
+    &quot;gds/&quot;,
+    str_remove(basename(vcf), &quot;.vcf.gz&quot;),
+    &quot;.gds&quot;
+  )
+  if (!file.exists(gdsPath)) {
+    if (!dir.exists(dirname(gdsPath))) {
+      dir.create(dirname(gdsPath), recursive = TRUE)
+    }
+    seqVCF2GDS(vcf, gdsPath)
+  }
+})</code></pre>
+<pre class="r"><code>gdsPaths &lt;- list.files(
+  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/09_callSnvs/gds&quot;,
+  pattern = &quot;.gds$&quot;,
+  full.names = TRUE
+)</code></pre>
+<pre class="r"><code>snvList &lt;- lapply(seq_along(gdsPaths), function(x){
+  gdsPath &lt;- gdsPaths[x]
+  sample &lt;- basename(gdsPath) %&gt;%
+    str_remove(&quot;.gds&quot;)
+  gds &lt;- seqOpen(gdsPath, readonly = FALSE)
+  snvs &lt;- tibble(
+    variant.id = seqGetData(gds, &quot;variant.id&quot;),
+    chromosome = seqGetData(gds, &quot;chromosome&quot;),
+    position = seqGetData(gds, &quot;position&quot;),
+    allele = seqGetData(gds, &quot;allele&quot;)
+  ) %&gt;%
+    dplyr::filter(
+      chromosome %in% drChrs,
+      str_detect(allele, &quot;\\*&quot;, negate = TRUE) ## Remove deletions
+    ) %&gt;%
+    mutate(
+      sample = sample,
+      refAllele = str_split(allele, &quot;,&quot;, simplify = TRUE)[,1],
+      altAllele = str_split(allele, &quot;,&quot;, simplify = TRUE)[,2]
+    )
+  seqClose(gds)
+  return(snvs)
+})</code></pre>
+<pre class="r"><code>filtProgress &lt;- snvList %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(noFilt = n())</code></pre>
+<pre class="r"><code>lapply(snvList, function(x){
+  chrList &lt;- x %&gt;%
+    dplyr::select(chromosome, position, refAllele, altAllele, sample) %&gt;%
+    split(.[,&#39;chromosome&#39;])
+  lapply(chrList, function(x){
+    chr &lt;- unique(x$chromosome)
+    sample &lt;- unique(x$sample)
+    path &lt;- paste0(
+      &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_wasp/snvs/&quot;,
+      sample,
+      &quot;/&quot;,
+      chr,
+      &quot;.snps.txt.gz&quot;
+    )
+    if (!file.exists(path)) {
+      if (!dir.exists(dirname(path))) {
+        dir.create(dirname(path), recursive = TRUE)
+      }
+      tibble(
+        position = x$position,
+        refAllele = x$refAllele,
+        altAllele = x$altAllele
+      ) %&gt;%
+        write_delim(file = path, delim = &quot; &quot;, col_names = FALSE)
+    }
+  })
+})</code></pre>
+<p>After exporting text-based input files, WASP filtering was performed on the HPC system. The resulting <code>BAM</code> files were ready for allele specific expression read counting.</p>
+</div>
+<div id="asereadcounter" class="section level2">
+<h2>ASEReadCounter</h2>
+<p><code>GATK</code> tool <code>ASEReadCounter</code> calculates allele counts at a set of positions after applying filters specifically tuned for ASE analysis of RNA-seq data. The filters operate on mapping quality, base quality, depth of coverage and overlapping paired reads. Each of these filters can be controlled by command-line arguments. The data in this analysis was generated with the following options:</p>
+<ul>
+<li><code>--min-mapping-quality 10</code></li>
+<li><code>--min-base-quality 20</code></li>
+<li><code>--count-overlap-reads-handling COUNT_FRAGMENTS_REQUIRE_SAME_BASE</code></li>
+<li>Ths option counts all fragments where the base is consistent when mate pairs overlap.</li>
+<li><code>--min-depth-of-non-filtered-base -1</code></li>
+<li>This argument is disabled, because depth filtering was performed manually (see next section).</li>
+</ul>
+<p>Heterozygous SNVs detected by <code>ASEReadCounter</code> were recorded in separate <code>tsv</code> files for each sample. These were loaded into R as a list of tibbles containing the unprocessed raw data for ASE analysis.</p>
+<pre class="r"><code>files &lt;- list.files(
+  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/11_aseReadCounter&quot;,
+  full.names = TRUE
+)
+samples &lt;- basename(files) %&gt;%
+  str_remove(&quot;.tsv&quot;)</code></pre>
+<pre class="r"><code>aseCounts &lt;- lapply(files, function(file){
+  sample &lt;- basename(file) %&gt;%
+    str_remove(&quot;.tsv&quot;)
+  read_tsv(
+    file,
+    col_types = &quot;cdcccdddddddd&quot;
+  ) %&gt;%
+    dplyr::filter(contig %in% as.character(drChrs)) %&gt;%
+    mutate(
+      sample = sample,
+      allele = paste0(refAllele, &quot;,&quot;, altAllele)
+    ) %&gt;%
+    left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)]) %&gt;%
+    dplyr::select(
+      chromosome = contig, position, allele, refCount, altCount, totalCount,
+      sample, genotype, lowMAPQDepth, lowBaseQDepth, rawDepth, otherBases,
+      improperPairs, refAllele, altAllele
+    )
+}) %&gt;% 
+  set_names(samples)</code></pre>
+<pre class="r"><code>filtProgress &lt;- aseCounts %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(
+    softwareFilt = n()
+  ) %&gt;%
+  left_join(filtProgress)</code></pre>
+<p>The number of genome-wide het-SNV positions as reported by <code>ASEReadCounter</code> following <code>WASP</code> filtering ranged from 348,587 to 489,768 across all samples.</p>
+<pre class="r"><code>aseFiltProps &lt;- aseCounts %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(
+    mapQ = sum(lowMAPQDepth) / sum(rawDepth),
+    baseQ = sum(lowBaseQDepth) / sum(rawDepth),
+    otherBases = sum(otherBases) / sum(rawDepth)
+  )</code></pre>
+<p>Across all samples, reads filtered due to insufficient mapping quality ranged between 0.05% and 0.07%, reads filtered due to base quality ranged between 1.83% and 2.34%, and reads filtered due to overlapping mate pairs with inconsistent bases ranged between 0.10% and 0.12%.</p>
+</div>
+<div id="filtering" class="section level2">
+<h2>Filtering</h2>
+<p>The remaining manual filtering procedures were carried out in <code>R</code>.</p>
+<div id="exonic-variants" class="section level3">
+<h3>Exonic variants</h3>
+<p>Variants in this analysis were determined from RNA-seq data, and therefore were filtered based on genomic position for those that lie in only exonic regions (Ensembl version 101). Gene identifiers were also annotated for each position to enable downstream analysis of ASE across genes.</p>
+<pre class="r"><code>exonOverlaps &lt;- lapply(aseCounts, function(x){
+  indices &lt;- x %&gt;%
+    dplyr::select(seqnames = chromosome, start = position) %&gt;%
+    mutate(end = start) %&gt;%
+    makeGRangesFromDataFrame() %&gt;%
+    findOverlaps(exons)
+  tibble(
+    snvInd = as.data.frame(indices)$queryHits,
+    geneInd = as.data.frame(indices)$subjectHits
+  )
+})</code></pre>
+<pre class="r"><code>counts &lt;- lapply(seq_along(aseCounts), function(x){
+  aseCounts[[x]][exonOverlaps[[x]]$snvInd,] %&gt;%
+    cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %&gt;%
+    as_tibble() %&gt;%
+    rownames_to_column(&quot;snvID&quot;)
+}) %&gt;%
+  set_names(samples)</code></pre>
+<pre class="r"><code>filtProgress &lt;- counts %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(
+    exonFilt = n()
+  ) %&gt;%
+  left_join(filtProgress)</code></pre>
+<p>After filtering for SNVs in exonic regions, the remaining number of het-SNVs ranged from 138,499 to 172,016 across all samples.</p>
+</div>
+<div id="coverage" class="section level3">
+<h3>Coverage</h3>
+<p>Another important QC step involves filtering Het-SNV sites based on coverage, as sites with low total counts are uninformative.</p>
+<p>Firstly, a quick inspection of coverage distribution:</p>
+<pre class="r"><code>counts %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(totalCount, colour = sample)) +
+  stat_ecdf(geom = &quot;step&quot;) +
+  coord_cartesian(xlim = c(0, 400)) +
+  labs(
+    x = &quot;Reads / het-SNV&quot;,
+    y = &quot;Cumulative distribution&quot;,
+    caption = &quot;&quot;
+  ) +
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_qc_files/figure-html/unnamed-chunk-18-1.png" alt="*Cumulative distribution of RNA-seq read coverage per het-SNV. Each line represents a separate sample. No samples appear problematic as they all display consistent read coverage distributions.*" width="768" />
+<p class="caption">
+<em>Cumulative distribution of RNA-seq read coverage per het-SNV. Each line represents a separate sample. No samples appear problematic as they all display consistent read coverage distributions.</em>
+</p>
+</div>
+<pre class="r"><code>lapply(counts, function(x){
+  n0 &lt;- x %&gt;%
+    dplyr::filter(totalCount &gt;= 0) %&gt;%
+    nrow()
+  n10 &lt;- x %&gt;%
+    dplyr::filter(totalCount &gt;= 10) %&gt;%
+    nrow()
+  n20 &lt;- x %&gt;%
+    dplyr::filter(totalCount &gt;= 20) %&gt;%
+    nrow()
+  n30 &lt;- x %&gt;%
+    dplyr::filter(totalCount &gt;= 30) %&gt;%
+    nrow()
+  n60 &lt;- x %&gt;%
+    dplyr::filter(totalCount &gt;= 60) %&gt;%
+    nrow()
+  sample &lt;- unique(x$sample)
+  tibble(
+    bin = c(&quot;\u2265 0&quot;, &quot;\u2265 10&quot;, &quot;\u2265 20&quot;, &quot;\u2265 30&quot;, &quot;\u2265 60&quot;),
+    n = c(n0, n10, n20, n30, n60),
+    sample = sample
+  )
+}) %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(bin, n, fill = bin)) +
+  geom_boxplot() +
+  labs(x = &quot;Reads / het-SNV&quot;, y = &quot;het-SNVs per sample&quot;) +
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_qc_files/figure-html/unnamed-chunk-19-1.png" alt="*The number of het-SNVs per sample that satisfy read coverage cut-offs*" width="768" />
+<p class="caption">
+<em>The number of het-SNVs per sample that satisfy read coverage cut-offs</em>
+</p>
+</div>
+<pre class="r"><code>counts &lt;- lapply(counts, function(x){
+  dplyr::filter(x, totalCount &gt;= 10)
+})</code></pre>
+<pre class="r"><code>filtProgress &lt;- counts %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(
+    covFilt = n()
+  ) %&gt;%
+  left_join(filtProgress)</code></pre>
+<p>A cut-off of at least 10 counts per het-SNV position was applied, leaving 81,142 to 109,033 het-SNVs across all samples.</p>
+</div>
+<div id="mono-allelic-expression" class="section level3">
+<h3>Mono-allelic expression</h3>
+<p>Producing evidence of mono-allelic expression from short read RNA-seq datasets without parental genotypes or imprinting information is a controversial issue. Het-SNV sites were therefore filtered based on a depth criteria for each allele (<span class="math inline">\(\ge\)</span> 3 counts or <span class="math inline">\(&gt;\)</span> 1% of the total counts for that allele).</p>
+<pre class="r"><code>counts &lt;- lapply(counts, function(x){
+  dplyr::filter(
+    x,
+    refCount &gt;= 3,
+    altCount &gt;= 3,
+    refCount / totalCount &gt; 0.01,
+    altCount / totalCount &gt; 0.01
+  )
+})</code></pre>
+<pre class="r"><code>filtProgress &lt;- counts %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(
+    monoFilt = n()
+  ) %&gt;%
+  left_join(filtProgress)</code></pre>
+<p>After filtering for mono-allelic expression, 77,710 to 104,674 het-SNVs remained across all samples.</p>
+</div>
+</div>
+</div>
+<div id="summary" class="section level1">
+<h1>Summary</h1>
+<pre class="r"><code>filtProgress %&gt;%
+  dplyr::select(
+    sample, None = noFilt, `WASP/ASEReadCounter` = softwareFilt,
+    Exonic = exonFilt, Coverage = covFilt, `Mono-allelic expression` = monoFilt
+  ) %&gt;%
+  pivot_longer(cols = -sample, names_to = &quot;Filter&quot;, values_to = &quot;SNVs&quot;) %&gt;%
+  mutate(Filter = factor(Filter, levels = unique(.$Filter))) %&gt;%
+  ggplot(aes(Filter, SNVs, group = Filter, fill = Filter)) +
+  geom_boxplot() +
+  scale_y_log10(
+    labels = comma,
+    breaks = c(seq(0, 500000, by = 100000), seq(750000, 1500000, by = 250000))
+  ) +
+  labs(y = &quot;hetSNVs per sample&quot;) +
+  theme(
+    legend.position = &quot;bottom&quot;,
+    axis.title.x = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_qc_files/figure-html/unnamed-chunk-24-1.png" alt="*The total number of het-SNVs remaining after various quality control filtering steps. The filters were applied sequentially from left to right across the x-axis, such that the remaining number of het-SNVs was always less than the previous step.*" width="768" />
+<p class="caption">
+<em>The total number of het-SNVs remaining after various quality control filtering steps. The filters were applied sequentially from left to right across the x-axis, such that the remaining number of het-SNVs was always less than the previous step.</em>
+</p>
+</div>
+<pre class="r"><code>genesWithSnvs &lt;- lapply(counts, function(x){
+  sample &lt;- unique(x$sample)
+  atLeast1 &lt;- length(unique(x$gene))
+  atLeast2 &lt;- x %&gt;%
+    group_by(gene) %&gt;%
+    summarise(n = n()) %&gt;%
+    dplyr::filter(n &gt;= 2) %&gt;%
+    nrow()
+  snvs &lt;- nrow(x)
+  tibble(sample = sample, atLeast1 = atLeast1, atLeast2 = atLeast2, snvs = snvs)
+}) %&gt;%
+  bind_rows() %&gt;%
+  left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)]) %&gt;%
+  dplyr::arrange(genotype, sample)</code></pre>
+<pre class="r"><code>genesWithSnvs %&gt;%
+  dplyr::select(
+    Sample = sample, Genotype = genotype, Genes = atLeast1, SNVs = snvs
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = paste0(
+      &quot;A summary of the remaining number of genes and SNVs detected in each &quot;,
+      &quot;sample after all quality control procedures were performed.&quot;
+    )
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+A summary of the remaining number of genes and SNVs detected in each sample after all quality control procedures were performed.
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Sample
+</th>
+<th style="text-align:left;">
+Genotype
+</th>
+<th style="text-align:left;">
+Genes
+</th>
+<th style="text-align:left;">
+SNVs
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+10_KB_B6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+10223
+</td>
+<td style="text-align:left;">
+99476
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+16_KB_C12
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+9905
+</td>
+<td style="text-align:left;">
+96587
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+19_KB_C3
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+9933
+</td>
+<td style="text-align:left;">
+96270
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+22_KB_C6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+10031
+</td>
+<td style="text-align:left;">
+99177
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+4_KB_A6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+9490
+</td>
+<td style="text-align:left;">
+88134
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+7_KB_B12
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+10118
+</td>
+<td style="text-align:left;">
+97130
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+8_KB_B3
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+8755
+</td>
+<td style="text-align:left;">
+77710
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+12_KB_B8
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+9770
+</td>
+<td style="text-align:left;">
+98076
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+15_KB_C11
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+10600
+</td>
+<td style="text-align:left;">
+104674
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+18_KB_C2
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+10035
+</td>
+<td style="text-align:left;">
+98943
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+2_KB_A11
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+10045
+</td>
+<td style="text-align:left;">
+97302
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+21_KB_C5
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+9748
+</td>
+<td style="text-align:left;">
+95946
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+24_KB_C8
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+9889
+</td>
+<td style="text-align:left;">
+98882
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+6_KB_B11
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+10176
+</td>
+<td style="text-align:left;">
+98593
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+9_KB_B5
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+10310
+</td>
+<td style="text-align:left;">
+100952
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+1_KB_A10
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9549
+</td>
+<td style="text-align:left;">
+92564
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+11_KB_B7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+10243
+</td>
+<td style="text-align:left;">
+99825
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+13_KB_B9
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+10070
+</td>
+<td style="text-align:left;">
+94861
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+14_KB_C10
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9857
+</td>
+<td style="text-align:left;">
+99460
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+17_KB_C1
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9739
+</td>
+<td style="text-align:left;">
+91396
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+20_KB_C4
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9981
+</td>
+<td style="text-align:left;">
+96639
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+23_KB_C7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9523
+</td>
+<td style="text-align:left;">
+91565
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+3_KB_A1
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9989
+</td>
+<td style="text-align:left;">
+95583
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+5_KB_A7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+9485
+</td>
+<td style="text-align:left;">
+91473
+</td>
+</tr>
+</tbody>
+</table>
+<div id="reference-mapping-bias" class="section level2">
+<h2>Reference mapping bias</h2>
+<p><code>WASP</code> filtering is expected to remove the vast majority of reads with mapping bias, but was checked to confirm its effectiveness. To estimate this effect the genome-wide reference allele ratio was calculated, which indicates a residual mapping bias if it shows a large deviation from 0.5.</p>
+<pre class="r"><code>ratios &lt;- lapply(counts, function(x){
+  x %&gt;%
+    dplyr::filter(totalCount != 0) %&gt;%
+    mutate(
+      refRatio = refCount / totalCount,
+      altRatio = altCount / totalCount
+    ) %&gt;%
+    dplyr::select(
+      chromosome, position, allele, refRatio, altRatio, totalCount,
+      sample, genotype, gene
+    )
+})</code></pre>
+<p>This can be visualised by plotting the distribution of reference allele ratios of each SNV. Bins were setup such that each bin represented a range of 0.01. A skew of towards one side of the distribution indicates mapping bias is still present.</p>
+<pre class="r"><code>ratioDists &lt;- bind_rows(ratios)
+ratioDists %&gt;%
+  mutate(
+    bin = cut(
+      refRatio,
+      seq(0, 1, by = 0.01),
+      labels = FALSE,
+      include.lowest = TRUE
+    ),
+    fill = case_when(
+      bin &lt; 49 ~ &quot;red&quot;,
+      between(bin, 49, 51) ~ &quot;grey&quot;,
+      bin &gt; 51 ~ &quot;blue&quot;
+    )
+  ) %&gt;%
+  ggplot(aes(refRatio, fill = fill)) +
+  geom_histogram(binwidth = 0.01, boundary = 0) +
+  labs(x = &quot;Reference allele ratio&quot;, y = &quot;Count&quot;) +
+  scale_fill_manual(values = c(&quot;red&quot;, &quot;grey50&quot;, &quot;blue&quot;)) +
+  facet_wrap(~ sample, ncol = 4) +
+  theme(legend.position = &quot;none&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_qc_files/figure-html/unnamed-chunk-28-1.png" alt="*Histogram of global reference allele ratios at each het-SNV faceted by sample. Reference ratios above 0.51 are shown in red and below 0.49 in blue, while balanced expression (0.49-0.51) is coloured grey. All samples showed profiles indicative of no residual mapping bias.*" width="768" />
+<p class="caption">
+<em>Histogram of global reference allele ratios at each het-SNV faceted by sample. Reference ratios above 0.51 are shown in red and below 0.49 in blue, while balanced expression (0.49-0.51) is coloured grey. All samples showed profiles indicative of no residual mapping bias.</em>
+</p>
+</div>
+<p>As an alternative viewpoint, boxplots of reference allele ratios were plotted for each sample. Median/mean reference allele ratios that deviate substantially from 0.5 indicate a mapping bias.</p>
+<pre class="r"><code>ratios %&gt;%
+  bind_rows() %&gt;%
+  left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)]) %&gt;%
+  dplyr::arrange(genotype, sample) %&gt;%
+  mutate(sample = factor(sample, levels = unique(sample))) %&gt;%
+  ggplot(aes(sample, refRatio, fill = genotype, colour = genotype)) +
+  geom_boxplot() +
+  stat_summary(fun = mean, geom = &quot;point&quot;, shape = 18, size = 2) +
+  geom_hline(yintercept = 0.5, linetype = &quot;dashed&quot;, colour = &quot;black&quot;) +
+  labs(x = &quot;Sample&quot;, y = &quot;Reference allele ratio&quot;) +
+  scale_fill_discrete(name = &quot;Genotype&quot;) +
+  scale_colour_manual(values = rep(&quot;grey50&quot;, 3)) +
+  scale_y_continuous(breaks = seq(0, 1, 0.2)) +
+  guides(colour = FALSE) +
+  theme(
+    axis.text.x = element_text(angle = -90, vjust = 0.5),
+    legend.position = &quot;bottom&quot;
+  ) +
+  ggtitle(label = &quot;Reference allele ratios after QC measures&quot;)</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_qc_files/figure-html/unnamed-chunk-29-1.png" alt="*Boxplots showing mapping bias for each sample. The mean reference ratio is indicated with a black diamond. Filtering procedures successfully were confirmed to have removed any potential mapping bias.*" width="768" />
+<p class="caption">
+<em>Boxplots showing mapping bias for each sample. The mean reference ratio is indicated with a black diamond. Filtering procedures successfully were confirmed to have removed any potential mapping bias.</em>
+</p>
+</div>
+<pre class="r"><code>refBias &lt;- ratios %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(mean = mean(refRatio), median = median(refRatio))
+altBias &lt;- ratios %&gt;%
+  bind_rows() %&gt;%
+  group_by(sample) %&gt;%
+  summarise(mean = mean(altRatio), median = median(altRatio))</code></pre>
+<p>No reference mapping bias was evident in any sample. Mean reference ratios ranged between 0.505 and 0.508. Median reference ratios ranged between 0.5 and 0.5.</p>
+</div>
+</div>
+<div id="export" class="section level1">
+<h1>Export</h1>
+<p><code>geneiASE</code> software was chosen for static ASE testing. Static ASE describes the difference between two variants of a heterozygous allele in a single sample in an unchanging condition. For static ASE, <code>geneiASE</code> software requires allele counts as a <code>tsv</code> file with four columns: feautureID, snpID, alternative allele count, reference allele count. Each sample’s allele counts were exported following this format for ASE testing with <code>geneiASE</code>.</p>
+<pre class="r"><code>staticCounts &lt;- lapply(counts, function(x){
+  x %&gt;%
+    left_join(altBias[,c(&quot;sample&quot;, &quot;mean&quot;)]) %&gt;%
+    dplyr::select(
+      gene, snvID, altCount, refCount, betabinom.p = mean
+    )
+})
+lapply(seq_along(staticCounts), function(x){
+  path &lt;- paste0(
+    &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/12_geneiase/counts/&quot;,
+    names(staticCounts[x]),
+    &quot;.static.tsv&quot;
+  )
+  if (!file.exists(path)) {
+    if (!dir.exists(dirname(path))) {
+      dir.create(dirname(path), recursive = TRUE)
+    }
+    write_tsv(staticCounts[[x]], path)
+  }
+})</code></pre>
+<pre class="r"><code>sessionInfo()</code></pre>
+<pre><code>## R version 4.1.0 (2021-05-18)
+## Platform: x86_64-pc-linux-gnu (64-bit)
+## Running under: Ubuntu 20.04.2 LTS
+## 
+## Matrix products: default
+## BLAS:   /usr/lib/x86_64-linux-gnu/blas/libblas.so.3.9.0
+## LAPACK: /usr/lib/x86_64-linux-gnu/lapack/liblapack.so.3.9.0
+## 
+## locale:
+##  [1] LC_CTYPE=en_AU.UTF-8       LC_NUMERIC=C               LC_TIME=en_AU.UTF-8        LC_COLLATE=en_AU.UTF-8    
+##  [5] LC_MONETARY=en_AU.UTF-8    LC_MESSAGES=en_AU.UTF-8    LC_PAPER=en_AU.UTF-8       LC_NAME=C                 
+##  [9] LC_ADDRESS=C               LC_TELEPHONE=C             LC_MEASUREMENT=en_AU.UTF-8 LC_IDENTIFICATION=C       
+## 
+## attached base packages:
+##  [1] splines   stats4    parallel  stats     graphics  grDevices utils     datasets  methods   base     
+## 
+## other attached packages:
+##  [1] msigdbr_7.4.1           htmltools_0.5.1.1       DT_0.18                 cqn_1.38.0              quantreg_5.86          
+##  [6] SparseM_1.81            preprocessCore_1.54.0   nor1mix_1.3-0           mclust_5.4.7            pheatmap_1.0.12        
+## [11] edgeR_3.34.0            limma_3.48.1            SeqArray_1.32.0         gdsfmt_1.28.0           UpSetR_1.4.0           
+## [16] pander_0.6.4            ggpubr_0.4.0            RColorBrewer_1.1-2      ggrepel_0.9.1           rmarkdown_2.9          
+## [21] ensembldb_2.16.2        AnnotationFilter_1.16.0 GenomicFeatures_1.44.0  AnnotationDbi_1.54.1    Biobase_2.52.0         
+## [26] GenomicRanges_1.44.0    GenomeInfoDb_1.28.1     IRanges_2.26.0          S4Vectors_0.30.0        future.apply_1.7.0     
+## [31] future_1.21.0           tictoc_1.0.1            fgsea_1.18.0            statmod_1.4.36          kableExtra_1.3.4       
+## [36] scales_1.1.1            AnnotationHub_3.0.1     BiocFileCache_2.0.0     dbplyr_2.1.1            BiocGenerics_0.38.0    
+## [41] here_1.0.1              magrittr_2.0.1          forcats_0.5.1           stringr_1.4.0           dplyr_1.0.7            
+## [46] purrr_0.3.4             readr_1.4.0             tidyr_1.1.3             tibble_3.1.2            ggplot2_3.3.5          
+## [51] tidyverse_1.3.1        
+## 
+## loaded via a namespace (and not attached):
+##   [1] utf8_1.2.1                    tidyselect_1.1.1              htmlwidgets_1.5.3             RSQLite_2.2.7                
+##   [5] grid_4.1.0                    BiocParallel_1.26.1           munsell_0.5.0                 codetools_0.2-18             
+##   [9] withr_2.4.2                   colorspace_2.0-2              filelock_1.0.2                highr_0.9                    
+##  [13] knitr_1.33                    rstudioapi_0.13               ggsignif_0.6.2                listenv_0.8.0                
+##  [17] MatrixGenerics_1.4.0          labeling_0.4.2                GenomeInfoDbData_1.2.6        bit64_4.0.5                  
+##  [21] farver_2.1.0                  rprojroot_2.0.2               parallelly_1.26.1             vctrs_0.3.8                  
+##  [25] generics_0.1.0                xfun_0.24                     R6_2.5.0                      locfit_1.5-9.4               
+##  [29] bitops_1.0-7                  cachem_1.0.5                  DelayedArray_0.18.0           assertthat_0.2.1             
+##  [33] promises_1.2.0.1              BiocIO_1.2.0                  gtable_0.3.0                  globals_0.14.0               
+##  [37] conquer_1.0.2                 MatrixModels_0.5-0            rlang_0.4.11                  systemfonts_1.0.2            
+##  [41] rtracklayer_1.52.0            rstatix_0.7.0                 lazyeval_0.2.2                broom_0.7.8                  
+##  [45] BiocManager_1.30.16           yaml_2.2.1                    abind_1.4-5                   modelr_0.1.8                 
+##  [49] crosstalk_1.1.1               backports_1.2.1               httpuv_1.6.1                  rsconnect_0.8.18             
+##  [53] tools_4.1.0                   ellipsis_0.3.2                jquerylib_0.1.4               Rcpp_1.0.7                   
+##  [57] plyr_1.8.6                    progress_1.2.2                zlibbioc_1.38.0               RCurl_1.98-1.3               
+##  [61] prettyunits_1.1.1             SummarizedExperiment_1.22.0   haven_2.4.1                   fs_1.5.0                     
+##  [65] data.table_1.14.0             openxlsx_4.2.4                reprex_2.0.0                  ProtGenerics_1.24.0          
+##  [69] matrixStats_0.59.0            hms_1.1.0                     mime_0.11                     evaluate_0.14                
+##  [73] xtable_1.8-4                  XML_3.99-0.6                  rio_0.5.27                    readxl_1.3.1                 
+##  [77] gridExtra_2.3                 compiler_4.1.0                biomaRt_2.48.2                crayon_1.4.1                 
+##  [81] mgcv_1.8-36                   later_1.2.0                   lubridate_1.7.10              DBI_1.1.1                    
+##  [85] MASS_7.3-54                   rappdirs_0.3.3                babelgene_21.4                Matrix_1.3-4                 
+##  [89] car_3.0-11                    cli_3.0.0                     pkgconfig_2.0.3               GenomicAlignments_1.28.0     
+##  [93] foreign_0.8-81                xml2_1.3.2                    svglite_2.0.0                 bslib_0.2.5.1                
+##  [97] webshot_0.5.2                 XVector_0.32.0                rvest_1.0.0                   digest_0.6.27                
+## [101] Biostrings_2.60.1             cellranger_1.1.0              fastmatch_1.1-0               restfulr_0.0.13              
+## [105] curl_4.3.2                    shiny_1.6.0                   Rsamtools_2.8.0               rjson_0.2.20                 
+## [109] nlme_3.1-152                  lifecycle_1.0.0               jsonlite_1.7.2                carData_3.0-4                
+## [113] viridisLite_0.4.0             fansi_0.5.0                   pillar_1.6.1                  lattice_0.20-44              
+## [117] KEGGREST_1.32.0               fastmap_1.1.0                 httr_1.4.2                    interactiveDisplayBase_1.30.0
+## [121] glue_1.4.2                    zip_2.2.0                     png_0.1-7                     BiocVersion_3.13.1           
+## [125] bit_4.0.4                     stringi_1.6.2                 sass_0.4.0                    blob_1.2.1                   
+## [129] memoise_2.0.0</code></pre>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

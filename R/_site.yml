@@ -1,0 +1,23 @@
+name: "210408_psen1_fADfAI_snv"
+output_dir: ../docs
+exclude: []
+navbar:
+  title: "210408_psen1_fADfAI_snv"
+  left:
+    - text: Home
+      href: index.html
+    - text: DE analysis
+      href: de_analysis.html
+    - text: DE enrichment
+      href: de_enrichment.html
+    - text: ASE QC
+      href: ase_qc.html
+    - text: ASE analysis
+      href: ase_analysis.html
+  right:
+    - icon: fa-github
+      href: https://github.com/baerlachlan/210408_psen1_fADfAI_snv
+output:
+  html_document:
+    theme: flatly
+    highlight: textmate

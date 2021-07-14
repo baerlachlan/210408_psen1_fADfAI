@@ -1,0 +1,70 @@
+---
+title: "Archive"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 3
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+A collection of code that I have written which I no longer need for the 
+analysis, but am too afraid to throw away in case I need it again...
+
+# Gene variants
+
+```{r}
+geneSym <- "psen1"
+```
+
+```{r}
+geneHets <- lapply(aseCounts, function(x){
+  geneId <- genes %>%
+    subset(seqnames %in% drChrs) %>%
+    subset(gene_name == geneSym) %>%
+    .$gene_id
+  eoi <- exons[[geneId]]
+  chr <- seqnames(eoi) %>%
+    unique() %>%
+    as.character() %>%
+    as.numeric()
+  ranges <- ranges(eoi) %>% 
+    as.data.frame() %>% 
+    pmap(function(start, end, ...){seq(start, end)}) %>%
+    unlist() %>%
+    unique()
+  x %>% 
+    dplyr::filter(
+      chromosome == chr,
+      position %in% ranges
+    )
+})
+```
+
+```{r}
+hetsPerSample <- lapply(seq_along(geneHets), function(x){
+  tibble(sample = names(geneHets)[x], het_positions = nrow(geneHets[[x]]))
+}) %>%
+  purrr::reduce(rbind) %>%
+  left_join(metadata) %>%
+  dplyr::arrange(genotype, sample)
+```
+

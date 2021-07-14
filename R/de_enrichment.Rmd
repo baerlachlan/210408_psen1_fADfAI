@@ -29,31 +29,37 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 # Setup 
 
 ```{r packages}
-library(tidyverse)
-library(magrittr)
-library(parallel)
-library(here)
-library(AnnotationHub)
-library(purrr)
-library(scales)
-library(kableExtra)
-library(edgeR)
-library(ggrepel)
-library(fgsea)
-library(RColorBrewer)
-library(pheatmap)
-library(cqn)
-library(ggpubr)
-library(DT)
-library(htmltools)
-library(pander)
-library(msigdbr)
+suppressPackageStartupMessages({
+  ## Common
+  library(tidyverse)
+  library(magrittr)
+  library(future.apply)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
+  library(edgeR)
+  library(fgsea)
+  library(pheatmap)
+  library(cqn)
+  library(DT)
+  library(htmltools)
+  library(msigdbr)
+})
 ```
 
 ```{r options}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
-cores <- detectCores() - 1
+cores <- availableCores() - 1
 ```
 
 ```{r}
@@ -760,7 +766,7 @@ contExample <- dFishTabs_hm$EOfAD$HALLMARK_OXIDATIVE_PHOSPHORYLATION
 dimnames(contExample) <- list(
   isLeadingEdge = c("Not leading edge", "Leading edge"),
   isMutantChr = c("Not chr17", "chr17")
-  )
+)
 pander(contExample)
 ```
 </center>
