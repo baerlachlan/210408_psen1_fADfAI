@@ -93,14 +93,14 @@ metadata <- read_csv(here("files/samples.csv")) %>%
   )
 metadata$genotype <- fct_relevel(
   metadata$genotype,
-  c("WT", "EOfAD-like/+", "fAI-like/+")
+  c("EOfAD-like/+", "fAI-like/+", "WT")
 )
 genoCols <- metadata$genotype %>%
   levels() %>%
   length() %>%
   brewer.pal("Set1") %>%
   setNames(levels(metadata$genotype))
-compCols <- genoCols[2:3]
+compCols <- genoCols[1:2]
 ```
 
 ```{r}
@@ -177,87 +177,6 @@ nASE <- sapply(topASE, function(x){
 
 ## Fisher's exact test
 
-The first and most simple approach to testing for overall enrichment of DE genes showing ASE is Fisher's exact test.
-2x2 contingency tables were constructed for each mutant genotype (fAD and fAI).
-Genotype fAD showed `r nrow(dplyr::filter(topDE$fAD, DE))` DE genes in comparison to WT, while genes presenting static ASE ranged from `r min(nASE[fad])` to `r max(nASE[fad])` across `r length(fad)` samples.
-Genotype fAI showed `r nrow(dplyr::filter(topDE$fAI, DE))` DE genes in comparison to WT, while genes presenting static ASE ranged from `r min(nASE[fai])` to `r max(nASE[fai])` across `r length(fai)` samples.
-
-```{r}
-fisherTabs <- topASE[str_detect(names(topASE), ("fAD|fAI"))] %>%
-  lapply(function(x){
-    geno <- unique(x$alias)
-    if (str_detect(geno, "fAD")) {
-      dat <- topDE$fAD[,c("gene_id", "DE")] %>%
-        left_join(x[,c("feat", "ASE")], by = c("gene_id" = "feat")) %>%
-        mutate(
-          DE = ifelse(DE == TRUE, "DE", "Not DE"),
-          ASE = ifelse(ASE == TRUE, "ASE", "No ASE"),
-          ASE = ifelse(is.na(ASE), "No ASE", ASE)
-        )
-      tab <- table(dat$DE, dat$ASE)
-      return(tab)
-    }
-    if (str_detect(geno, "fAI")) {
-      dat <- topDE$fAI[,c("gene_id", "DE")] %>%
-        left_join(x[,c("feat", "ASE")], by = c("gene_id" = "feat")) %>%
-        mutate(
-          DE = ifelse(DE == TRUE, "DE", "Not DE"),
-          ASE = ifelse(ASE == TRUE, "ASE", "No ASE"),
-          ASE = ifelse(is.na(ASE), "No ASE", ASE)
-        )
-      tab <- table(dat$DE, dat$ASE)
-      return(tab)
-    }
-  })
-```
-
-Concerns with statistical power for Fisher's exact test were assessed due to the small number of DE genes for both genotypes.
-This was performed with the `power.fisher.test()` function using 1000 simulations for each sample.
-
-```{r}
-set.seed(17)
-fisherSim <- sapply(fisherTabs, function(x){
-  p1 <- x[1,1] / (x[2,1])
-  n1 <- (x[1,1] + x[2,1])
-  p2 <- x[1,2] / (x[2,2])
-  n2 <- (x[1,2] + x[2,2])
-  power.fisher.test(p1, p2, n1, n2, alpha = 0.05, nsim = 1000)
-})
-```
-
-```{r}
-fisherSim %>%
-  enframe(name = "Sample", value = "Power") %>%
-  left_join(metadata, by = c("Sample" = "alias")) %>%
-  ggplot(aes(Sample, Power)) +
-  geom_bar(aes(fill = genotype), stat = "identity") +
-  scale_fill_manual(values = compCols) +
-  labs(fill = "Genotype")
-```
-
-Fisher's exact test lacks power to detect enrichment of DE genes presenting ASE.
-The test was stil performed as an initial insight, but other methods must be considered to make proper conclusions.
-
-```{r}
-fisherTest <- lapply(fisherTabs, fisher.test)
-fisherP <- sapply(fisherTest, function(x){x$p.value})
-```
-
-```{r}
-fisherP %>%
-  enframe(name = "Sample", value = "p") %>%
-  left_join(metadata, by = c("Sample" = "alias")) %>%
-  ggplot(aes(Sample, -log10(p))) +
-  geom_bar(aes(fill = genotype), stat = "identity") +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
-  scale_fill_manual(values = compCols) +
-  labs(fill = "Genotype", y = log10plab)
-```
-
-## Gene Set Enrichment Analysis
-
-### Setup
-
 ```{r}
 chrGenes <- genes %>%
   as_tibble() %>%
@@ -267,6 +186,123 @@ chrGenes <- genes %>%
   lapply(pull, gene_id) %>%
   set_names(paste0("chr", names(.)))
 ```
+
+```{r}
+chrGenes_df <- chrGenes %>%
+  lapply(list) %>%
+  as_tibble() %>%
+  pivot_longer(cols = everything(), names_to = "chr", values_to= "feat") %>%
+  unnest(feat)
+```
+
+```{r}
+aseByGene <- lapply(topASE, dplyr::filter, ASE) %>%
+  bind_rows() %>%
+  mutate(genoAlias = case_when(
+    str_detect(alias, "fAD") ~ "fAD",
+    str_detect(alias, "fAI") ~ "fAI",
+    str_detect(alias, "wt") ~ "WT",
+  )) %>%
+  group_by(feat, genoAlias) %>%
+  tally() %>%
+  ungroup() %>%
+  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
+  left_join(chrGenes_df)
+```
+
+```{r}
+aseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
+  aseByGene %>%
+    dplyr::filter(!!sym(geno) != 0) %>%
+    group_by(chr) %>%
+    tally()
+}, simplify = FALSE)
+```
+
+```{r}
+noAseByGene <- lapply(topASE, dplyr::filter, !ASE) %>%
+  bind_rows() %>%
+  mutate(genoAlias = case_when(
+    str_detect(alias, "fAD") ~ "fAD",
+    str_detect(alias, "fAI") ~ "fAI",
+    str_detect(alias, "wt") ~ "WT",
+  )) %>%
+  group_by(feat, genoAlias) %>%
+  tally() %>%
+  ungroup() %>%
+  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
+  left_join(chrGenes_df)
+```
+
+```{r}
+noAseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
+  noAseByGene %>%
+    dplyr::filter(!!sym(geno) != 0) %>%
+    group_by(chr) %>%
+    tally()
+}, simplify = FALSE)
+```
+
+```{r}
+aseTabs <- sapply(aseByChr, function(x){
+  sapply(x$chr, function(y){
+    mutate(x, isChr = chr == y) %>%
+      group_by(isChr) %>%
+      summarise(ase = sum(n))
+  }, simplify = FALSE)
+}, simplify = FALSE)
+
+noAseTabs <- sapply(noAseByChr, function(x){
+  sapply(x$chr, function(y){
+    mutate(x, isChr = chr == y) %>%
+      group_by(isChr) %>%
+      summarise(noAse = sum(n))
+  }, simplify = FALSE)
+}, simplify = FALSE)
+```
+
+```{r}
+fisherTestAse <- function(.x, .y){
+  left_join(.x, .y) %>%
+    column_to_rownames("isChr") %>%
+    as.matrix() %>%
+    fisher.test()
+}
+```
+
+```{r}
+fisherAse <- list(
+  fAD = map2(aseTabs$fAD, noAseTabs$fAD, fisherTestAse),
+  fAI = map2(aseTabs$fAI, noAseTabs$fAI, fisherTestAse),
+  WT = map2(aseTabs$WT, noAseTabs$WT, fisherTestAse)
+)
+```
+
+```{r, fig.height=4}
+lapply(seq_along(fisherAse), function(x){
+  vapply(fisherAse[[x]], function(y){
+    y$p.value
+  }, numeric(1)) %>%
+    enframe(name = "chr", value = "pval") %>%
+    mutate(
+      chr = factor(chr, levels = str_sort(chr, numeric = TRUE)),
+      genotype = factor(genotypes[x])
+      )
+}) %>%
+  bind_rows() %>%
+  ggplot(aes(chr, -log10(pval), fill = genotype)) +
+  geom_bar(stat = "identity", position = "dodge", colour= "black", width = 0.7) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", ) +
+  scale_fill_manual(values = genoCols) +
+  scale_x_discrete(labels = seq(1:25)) +
+  labs(y = log10plab, x = "Chromosome", fill = "Genotype") +
+  theme(legend.position = "bottom")
+```
+
+
+## Gene Set Enrichment Analysis
+
+### Setup
 
 ```{r}
 wilsonConf <- function(pvals, conf.level = 0.95){
@@ -562,56 +598,4 @@ lapply(seq_along(mean_d), function(ind){
   ) +
   scale_fill_manual(values = compCols) +
   labs(y = log10plab)
-```
-
-# tmp
-
-```{r}
-chrGenes_df <- chrGenes %>%
-  lapply(list) %>%
-  as_tibble() %>%
-  pivot_longer(cols = everything(), names_to = "chr", values_to= "feat") %>%
-  unnest(feat)
-```
-
-```{r}
-## Give number of samples showing ASE for each gene
-aseByGene <- lapply(topASE, dplyr::filter, ASE) %>%
-  bind_rows() %>%
-  mutate(genoAlias = case_when(
-    str_detect(alias, "fAD") ~ "fAD",
-    str_detect(alias, "fAI") ~ "fAI",
-    str_detect(alias, "wt") ~ "WT",
-  )) %>%
-  group_by(feat, genoAlias) %>%
-  tally() %>%
-  ungroup() %>%
-  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
-  left_join(chrGenes_df)
-```
-
-```{r}
-## Gives number of genes showingASE in at least 1 sample
-aseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
-  aseByGene %>%
-    dplyr::filter(!!sym(geno) != 0) %>%
-    group_by(chr) %>%
-    tally(name = geno) %>%
-    arrange(desc(!!sym(geno)))
-}, simplify = FALSE)
-```
-
-```{r}
-noAseByGene <- lapply(topASE, dplyr::filter, !ASE) %>%
-  bind_rows() %>%
-  mutate(genoAlias = case_when(
-    str_detect(alias, "fAD") ~ "fAD",
-    str_detect(alias, "fAI") ~ "fAI",
-    str_detect(alias, "wt") ~ "WT",
-  )) %>%
-  group_by(feat, genoAlias) %>%
-  tally() %>%
-  ungroup() %>%
-  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
-  left_join(chrGenes_df)
 ```
