@@ -286,8 +286,9 @@ lapply(seq_along(fisherAse), function(x){
     enframe(name = "chr", value = "pval") %>%
     mutate(
       chr = factor(chr, levels = str_sort(chr, numeric = TRUE)),
-      genotype = factor(genotypes[x])
-      )
+      genotype = factor(genotypes[x]),
+      p.adj = p.adjust(pval, method = "bonf")
+    )
 }) %>%
   bind_rows() %>%
   ggplot(aes(chr, -log10(pval), fill = genotype)) +
@@ -305,11 +306,11 @@ lapply(seq_along(fisherAse), function(x){
 ### Setup
 
 ```{r}
-wilsonConf <- function(pvals, conf.level = 0.95){
-  p <- mean(pvals)
-  n <- length(pvals)
-  alpha <- 1 - conf.level
-  alpha2 <- 0.5 * alpha
+wilsonConf <- function(p.vals, conf.level = 0.95){
+  p <- mean(p.vals)
+  n <- length(p.vals)
+  alpha <- (1 - conf.level)
+  alpha2 <- alpha / 2
   z <- qnorm(1 - alpha2)
   z2 <- z * z
   p1 <- p + 0.5 * z2/n
@@ -318,13 +319,29 @@ wilsonConf <- function(pvals, conf.level = 0.95){
   lcl <- (p1 - p2)/p3
   ucl <- (p1 + p2)/p3
   res.wilson <- tibble(
-    mean = p,
-    conf = p2,
+    mean.p = p,
     lower = lcl,
     upper = ucl,
-    sig = mean < 0.05
+    n = n,
+    sig = mean.p < alpha
   )
   return(res.wilson)
+}
+```
+
+```{r}
+bonfConf <- function(adj.p.val, n, n.bonf, conf.level = 0.95, limit = c("lower", "upper")){
+  alpha <- ((1 - conf.level) / n.bonf)
+  alpha2 <- alpha / 2
+  z <- qnorm(1 - alpha2)
+  z2 <- z * z
+  p1 <- adj.p.val + 0.5 * z2/n
+  p2 <- z * sqrt((adj.p.val * (1 - adj.p.val) + 0.25 * z2/n)/n)
+  p3 <- 1 + z2/n
+  lcl <- (p1 - p2)/p3
+  ucl <- (p1 + p2)/p3
+  if (limit == "lower"){return(lcl)}
+  if (limit == "upper"){return(ucl)}
 }
 ```
 
@@ -396,7 +413,6 @@ file_nd <- paste0(
 ## Across 6 threads it takes 1-2 hours to complete
 if (!file.exists(file_nd)) {
   plan(list(tweak(multisession, workers = cores), sequential))
-  
   ranks_nd <- future_sapply(1:perms, function(...){
     future_sapply(topASE, permRanks_nd, future.seed = 17)
   }, future.seed = 17) %>%
@@ -409,7 +425,6 @@ if (!file.exists(file_nd)) {
   }, future.seed = 17) %>%
     set_names(colnames(ranks_nd))
   saveRDS(fgsea_nd, file_nd)
-  
   plan(sequential)
 }
 ```
@@ -440,7 +455,12 @@ mean_nd <- lapply(pvals_nd, function(sample){
       mutate(chromosome = as.factor(chr))
   }) %>%
     bind_rows() %>%
-    dplyr::select(chromosome, everything())
+    dplyr::select(chromosome, everything()) %>%
+    mutate(
+      adj.mean.p = p.adjust(mean.p, method = "bonf"),
+      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "lower"),
+      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "upper")
+    )
 }) 
 ```
 
@@ -455,8 +475,12 @@ lapply(seq_along(mean_nd), function(ind){
 }) %>%
   bind_rows() %>%
   left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
-  ggplot(aes(sample, -log10(mean))) +
+  ggplot(aes(sample, -log10(adj.mean.p))) +
   geom_bar(stat = "identity", aes(fill = genotype)) +
+  geom_errorbar(aes(
+    ymax = -log10(adj.lower),
+    ymin = -log10(adj.upper)
+  ), width = 0.2) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
   facet_wrap(~ chromosome) +
   theme(
@@ -523,7 +547,6 @@ file_d <- paste0(
 ## Across 6 threads it takes 1-2 hours to complete
 if (!file.exists(file_d)) {
   plan(list(tweak(multisession, workers = 6), sequential))
-  
   ranks_d <- future_sapply(1:perms, function(...){
     future_sapply(
       topASE[str_detect(names(topASE), "(fAD|fAI)")],
@@ -540,7 +563,6 @@ if (!file.exists(file_d)) {
   }, future.seed = 17) %>%
     set_names(colnames(ranks_d))
   saveRDS(fgsea_d, file_d)
-  
   plan(sequential)
 }
 ```
@@ -571,7 +593,12 @@ mean_d <- lapply(pvals_d, function(sample){
       mutate(chromosome = as.factor(chr))
   }) %>%
     bind_rows() %>%
-    dplyr::select(chromosome, everything())
+    dplyr::select(chromosome, everything()) %>%
+    mutate(
+      adj.mean.p = p.adjust(mean.p, method = "bonf"),
+      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "lower"),
+      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "upper")
+    )
 }) 
 ```
 
@@ -586,8 +613,12 @@ lapply(seq_along(mean_d), function(ind){
 }) %>%
   bind_rows() %>%
   left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
-  ggplot(aes(sample, -log10(mean))) +
+  ggplot(aes(sample, -log10(adj.mean.p))) +
   geom_bar(stat = "identity", aes(fill = genotype)) +
+  geom_errorbar(aes(
+    ymax = -log10(adj.lower),
+    ymin = -log10(adj.upper)
+  ), width = 0.2) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
   facet_wrap(~ chromosome) +
   theme(
