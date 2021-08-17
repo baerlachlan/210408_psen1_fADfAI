@@ -91,9 +91,27 @@ metadata <- read_csv(here("files/samples.csv")) %>%
       paste0(rep("wt", 9), seq(1, 9))
     )
   )
+metadata$genotype <- fct_relevel(
+  metadata$genotype,
+  c("EOfAD-like/+", "fAI-like/+", "WT")
+)
+genoCols <- metadata$genotype %>%
+  levels() %>%
+  length() %>%
+  brewer.pal("Set1") %>%
+  setNames(levels(metadata$genotype))
+compCols <- genoCols[1:2]
+```
+
+```{r}
 metadata %>%
+  dplyr::rename(
+    Sample = sample, `Fish ID` = fish_id, `Batch Killed` = batch_killed,
+    `Genotype 1` = genotype, `Genotype 2` = Genotype_2, Alias = alias
+  ) %>%
   kable(
-    align = "lllllll"
+    align = "l",
+    caption = "Sample metadata"
   ) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed", "responsive")
@@ -101,6 +119,9 @@ metadata %>%
 ```
 
 ```{r}
+genotypes <- unique(metadata$genotype) %>%
+  as.vector() %>%
+  set_names(., .)
 fad <- metadata$alias %>%
   str_detect("fAD")
 fai <- metadata$alias %>%
@@ -156,85 +177,6 @@ nASE <- sapply(topASE, function(x){
 
 ## Fisher's exact test
 
-The first and most simple approach to testing for overall enrichment of DE genes showing ASE is Fisher's exact test.
-2x2 contingency tables were constructed for each mutant genotype (fAD and fAI).
-Genotype fAD showed `r nrow(dplyr::filter(topDE$fAD, DE))` DE genes in comparison to WT, while genes presenting static ASE ranged from `r min(nASE[fad])` to `r max(nASE[fad])` across `r length(fad)` samples.
-Genotype fAI showed `r nrow(dplyr::filter(topDE$fAI, DE))` DE genes in comparison to WT, while genes presenting static ASE ranged from `r min(nASE[fai])` to `r max(nASE[fai])` across `r length(fai)` samples.
-
-```{r}
-fisherTabs <- topASE[str_detect(names(topASE), ("fAD|fAI"))] %>%
-  lapply(function(x){
-    geno <- unique(x$alias)
-    if (str_detect(geno, "fAD")) {
-      dat <- topDE$fAD[,c("gene_id", "DE")] %>%
-        left_join(x[,c("feat", "ASE")], by = c("gene_id" = "feat")) %>%
-        mutate(
-          DE = ifelse(DE == TRUE, "DE", "Not DE"),
-          ASE = ifelse(ASE == TRUE, "ASE", "No ASE"),
-          ASE = ifelse(is.na(ASE), "No ASE", ASE)
-        )
-      tab <- table(dat$DE, dat$ASE)
-      return(tab)
-    }
-    if (str_detect(geno, "fAI")) {
-      dat <- topDE$fAI[,c("gene_id", "DE")] %>%
-        left_join(x[,c("feat", "ASE")], by = c("gene_id" = "feat")) %>%
-        mutate(
-          DE = ifelse(DE == TRUE, "DE", "Not DE"),
-          ASE = ifelse(ASE == TRUE, "ASE", "No ASE"),
-          ASE = ifelse(is.na(ASE), "No ASE", ASE)
-        )
-      tab <- table(dat$DE, dat$ASE)
-      return(tab)
-    }
-  })
-```
-
-Concerns with statistical power for Fisher's exact test were assessed due to the small number of DE genes for both genotypes.
-This was performed with the `power.fisher.test()` function using 1000 simulations for each sample.
-
-```{r}
-set.seed(17)
-fisherSim <- sapply(fisherTabs, function(x){
-  p1 <- x[1,1] / (x[2,1])
-  n1 <- (x[1,1] + x[2,1])
-  p2 <- x[1,2] / (x[2,2])
-  n2 <- (x[1,2] + x[2,2])
-  power.fisher.test(p1, p2, n1, n2, alpha = 0.05, nsim = 1000)
-})
-```
-
-```{r}
-fisherSim %>%
-  enframe(name = "Sample", value = "Power") %>%
-  left_join(metadata, by = c("Sample" = "alias")) %>%
-  ggplot(aes(Sample, Power)) +
-  geom_bar(aes(fill = genotype), stat = "identity") +
-  labs(fill = "Genotype")
-```
-
-Fisher's exact test lacks power to detect enrichment of DE genes presenting ASE.
-The test was stil performed as an initial insight, but other methods must be considered to make proper conclusions.
-
-```{r}
-fisherTest <- lapply(fisherTabs, fisher.test)
-fisherP <- sapply(fisherTest, function(x){x$p.value})
-```
-
-```{r}
-fisherP %>%
-  enframe(name = "Sample", value = "p") %>%
-  left_join(metadata, by = c("Sample" = "alias")) %>%
-  ggplot(aes(Sample, -log10(p))) +
-  geom_bar(aes(fill = genotype), stat = "identity") +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
-  labs(fill = "Genotype")
-```
-
-## Gene Set Enrichment Analysis
-
-### Setup
-
 ```{r}
 chrGenes <- genes %>%
   as_tibble() %>%
@@ -246,10 +188,167 @@ chrGenes <- genes %>%
 ```
 
 ```{r}
-wilsonConf <- function(pvals, conf.level = 0.95){
-  p <- mean(pvals)
-  n <- length(pvals)
-  alpha <- 1 - conf.level
+chrGenes_df <- chrGenes %>%
+  lapply(list) %>%
+  as_tibble() %>%
+  pivot_longer(cols = everything(), names_to = "chr", values_to= "feat") %>%
+  unnest(feat)
+```
+
+```{r}
+aseByGene <- lapply(topASE, dplyr::filter, ASE) %>%
+  bind_rows() %>%
+  mutate(genoAlias = case_when(
+    str_detect(alias, "fAD") ~ "fAD",
+    str_detect(alias, "fAI") ~ "fAI",
+    str_detect(alias, "wt") ~ "WT",
+  )) %>%
+  group_by(feat, genoAlias) %>%
+  tally() %>%
+  ungroup() %>%
+  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
+  left_join(chrGenes_df)
+```
+
+```{r}
+aseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
+  aseByGene %>%
+    dplyr::filter(!!sym(geno) != 0) %>%
+    group_by(chr) %>%
+    tally()
+}, simplify = FALSE)
+```
+
+```{r}
+noAseByGene <- lapply(topASE, dplyr::filter, !ASE) %>%
+  bind_rows() %>%
+  mutate(genoAlias = case_when(
+    str_detect(alias, "fAD") ~ "fAD",
+    str_detect(alias, "fAI") ~ "fAI",
+    str_detect(alias, "wt") ~ "WT",
+  )) %>%
+  group_by(feat, genoAlias) %>%
+  tally() %>%
+  ungroup() %>%
+  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
+  left_join(chrGenes_df)
+```
+
+```{r}
+noAseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
+  noAseByGene %>%
+    dplyr::filter(!!sym(geno) != 0) %>%
+    group_by(chr) %>%
+    tally()
+}, simplify = FALSE)
+```
+
+```{r}
+aseTabs <- sapply(aseByChr, function(x){
+  sapply(x$chr, function(y){
+    mutate(x, isChr = chr == y) %>%
+      group_by(isChr) %>%
+      summarise(ase = sum(n))
+  }, simplify = FALSE)
+}, simplify = FALSE)
+
+noAseTabs <- sapply(noAseByChr, function(x){
+  sapply(x$chr, function(y){
+    mutate(x, isChr = chr == y) %>%
+      group_by(isChr) %>%
+      summarise(noAse = sum(n))
+  }, simplify = FALSE)
+}, simplify = FALSE)
+```
+
+```{r}
+fisherTestAse <- function(.x, .y){
+  left_join(.x, .y) %>%
+    column_to_rownames("isChr") %>%
+    as.matrix() %>%
+    fisher.test()
+}
+```
+
+```{r}
+fisherAse <- list(
+  fAD = map2(aseTabs$fAD, noAseTabs$fAD, fisherTestAse),
+  fAI = map2(aseTabs$fAI, noAseTabs$fAI, fisherTestAse),
+  WT = map2(aseTabs$WT, noAseTabs$WT, fisherTestAse)
+)
+```
+
+```{r, fig.height=4}
+lapply(seq_along(fisherAse), function(x){
+  vapply(fisherAse[[x]], function(y){
+    y$p.value
+  }, numeric(1)) %>%
+    enframe(name = "chr", value = "pval") %>%
+    mutate(
+      chr = factor(chr, levels = str_sort(chr, numeric = TRUE)),
+      genotype = factor(genotypes[x]),
+      p.adj = p.adjust(pval, method = "bonf")
+    )
+}) %>%
+  bind_rows() %>%
+  ggplot(aes(chr, -log10(pval), fill = genotype)) +
+  geom_bar(stat = "identity", position = "dodge", colour= "black", width = 0.7) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", ) +
+  scale_fill_manual(values = genoCols) +
+  scale_x_discrete(labels = seq(1:25)) +
+  labs(y = log10plab, x = "Chromosome", fill = "Genotype") +
+  theme(legend.position = "bottom")
+```
+
+
+## Gene Set Enrichment Analysis
+
+### Setup
+
+```{r}
+wilsonConf <- function(p.vals, conf.level = 0.95){
+  p <- mean(p.vals)
+  n <- length(p.vals)
+  alpha <- (1 - conf.level)
+  alpha2 <- alpha / 2
+  z <- qnorm(1 - alpha2)
+  z2 <- z * z
+  p1 <- p + 0.5 * z2/n
+  p2 <- z * sqrt((p * (1 - p) + 0.25 * z2/n)/n)
+  p3 <- 1 + z2/n
+  lcl <- (p1 - p2)/p3
+  ucl <- (p1 + p2)/p3
+  res.wilson <- tibble(
+    mean.p = p,
+    lower = lcl,
+    upper = ucl,
+    n = n,
+    sig = mean.p < alpha
+  )
+  return(res.wilson)
+}
+```
+
+```{r}
+bonfConf <- function(adj.p.val, n, n.bonf, conf.level = 0.95, limit = c("lower", "upper")){
+  alpha <- ((1 - conf.level) / n.bonf)
+  alpha2 <- alpha / 2
+  z <- qnorm(1 - alpha2)
+  z2 <- z * z
+  p1 <- adj.p.val + 0.5 * z2/n
+  p2 <- z * sqrt((adj.p.val * (1 - adj.p.val) + 0.25 * z2/n)/n)
+  p3 <- 1 + z2/n
+  lcl <- (p1 - p2)/p3
+  ucl <- (p1 + p2)/p3
+  if (limit == "lower"){return(lcl)}
+  if (limit == "upper"){return(ucl)}
+}
+```
+
+```{r}
+intSizeByN <- lapply(seq(1:1000), function(n){
+  p <- 0.05
+  alpha <- 1 - p
   alpha2 <- 0.5 * alpha
   z <- qnorm(1 - alpha2)
   z2 <- z * z
@@ -259,14 +358,21 @@ wilsonConf <- function(pvals, conf.level = 0.95){
   lcl <- (p1 - p2)/p3
   ucl <- (p1 + p2)/p3
   res.wilson <- tibble(
-    mean = p,
-    conf = p2,
+    p = p,
+    n = n,
     lower = lcl,
-    upper = ucl,
-    sig = mean < 0.05
+    upper = ucl
   )
   return(res.wilson)
-}
+})
+intSizeByN %>%
+  bind_rows() %>%
+  mutate(size = upper - lower) %>%
+  ggplot(aes(n, size)) +
+  geom_line() +
+  labs(y = "Wilson interval size") +
+  scale_y_continuous(breaks = seq(0, 0.03, by = 0.001)) +
+  scale_x_continuous(breaks = seq(0, 1000, by = 100))
 ```
 
 ### Non-directional
@@ -307,7 +413,6 @@ file_nd <- paste0(
 ## Across 6 threads it takes 1-2 hours to complete
 if (!file.exists(file_nd)) {
   plan(list(tweak(multisession, workers = cores), sequential))
-  
   ranks_nd <- future_sapply(1:perms, function(...){
     future_sapply(topASE, permRanks_nd, future.seed = 17)
   }, future.seed = 17) %>%
@@ -320,38 +425,8 @@ if (!file.exists(file_nd)) {
   }, future.seed = 17) %>%
     set_names(colnames(ranks_nd))
   saveRDS(fgsea_nd, file_nd)
-  
   plan(sequential)
 }
-```
-
-```{r, eval=FALSE, include=FALSE}
-# perms <- 500
-# file_nd <- paste0(here(), "/files/fgsea_nd_", perms, "perms.Rds")
-# if (!file.exists(file_nd)) {
-#   set.seed(17)
-#   tic()
-#   ranks_nd <- replicate(
-#     n = perms,
-#     expr = lapply(topASE, permRanks_nd)
-#   ) %>%
-#     t() %>%
-#     as_tibble()
-#   toc()
-#   ## 3384.696 sec elapsed
-#   set.seed(17)
-#   tic()
-#   fgsea_nd <- mclapply(as.list(ranks_nd), function(x){
-#     x %>%
-#       lapply(function(y){
-#         fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-#       })
-#   }, mc.cores = cores) %>%
-#     set_names(colnames(ranks_nd))
-#   toc()
-#   ## 4205.458 sec elapsed
-#   saveRDS(fgsea_nd, file_nd)
-# }
 ```
 
 ```{r}
@@ -379,12 +454,17 @@ mean_nd <- lapply(pvals_nd, function(sample){
     wilsonConf(chrList[[x]]) %>%
       mutate(chromosome = as.factor(chr))
   }) %>%
-    purrr::reduce(rbind) %>%
-    dplyr::select(chromosome, everything())
+    bind_rows() %>%
+    dplyr::select(chromosome, everything()) %>%
+    mutate(
+      adj.mean.p = p.adjust(mean.p, method = "bonf"),
+      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "lower"),
+      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "upper")
+    )
 }) 
 ```
 
-```{r, fig.height=15}
+```{r, fig.height=7.5}
 lapply(seq_along(mean_nd), function(ind){
   x <- mean_nd[[ind]]
   x %>%
@@ -393,10 +473,14 @@ lapply(seq_along(mean_nd), function(ind){
       chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
     )
 }) %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
-  ggplot(aes(sample, -log10(mean))) +
+  ggplot(aes(sample, -log10(adj.mean.p))) +
   geom_bar(stat = "identity", aes(fill = genotype)) +
+  geom_errorbar(aes(
+    ymax = -log10(adj.lower),
+    ymin = -log10(adj.upper)
+  ), width = 0.2) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
   facet_wrap(~ chromosome) +
   theme(
@@ -405,31 +489,8 @@ lapply(seq_along(mean_nd), function(ind){
     axis.title.x = element_blank(),
     legend.position = "bottom"
   ) +
-  labs(y = "-log10(p)")
-```
-
-```{r}
-# p <- mean(pvals_nd$fAI8$chr14)
-# n <- length(pvals_nd$fAI8$chr14)
-# lapply(seq(1, 1000), function(n){
-#   alpha <- 1 - conf.level
-#   alpha <- rep(alpha, length = length(p))
-#   alpha2 <- 0.5 * alpha
-#   z <- qnorm(1 - alpha2)
-#   z2 <- z * z
-#   p1 <- p + 0.5 * z2/n
-#   p2 <- z * sqrt((p * (1 - p) + 0.25 * z2/n)/n)
-#   p3 <- 1 + z2/n
-#   lcl <- (p1 - p2)/p3
-#   ucl <- (p1 + p2)/p3
-#   res.wilson <- cbind(mean = p, lower = lcl, upper = ucl, n = n)
-#   return(res.wilson)
-# }) %>%
-#   purrr::reduce(rbind) %>%
-#   as_tibble() %>%
-#   mutate(diff = upper - lower) %>%
-#   ggplot(aes(n, diff)) +
-#   geom_point()
+  scale_fill_manual(values = genoCols) +
+  labs(y = log10plab)
 ```
 
 ### Directional
@@ -486,7 +547,6 @@ file_d <- paste0(
 ## Across 6 threads it takes 1-2 hours to complete
 if (!file.exists(file_d)) {
   plan(list(tweak(multisession, workers = 6), sequential))
-  
   ranks_d <- future_sapply(1:perms, function(...){
     future_sapply(
       topASE[str_detect(names(topASE), "(fAD|fAI)")],
@@ -503,40 +563,8 @@ if (!file.exists(file_d)) {
   }, future.seed = 17) %>%
     set_names(colnames(ranks_d))
   saveRDS(fgsea_d, file_d)
-  
   plan(sequential)
 }
-```
-
-```{r}
-# ## This code chunk has a lengthy run-time so the object is saved as Rds and reloaded when needed
-# ## It will not execute if the saved object already exists
-# perms <- 500
-# file_d <- paste0(here(), "/files/fgsea_d_", perms, "perms.Rds")
-# if (!file.exists(file_d)) {
-#   set.seed(17)
-#   tic()
-#   ranks_d <- replicate(
-#     n = perms,
-#     expr = lapply(topASE[str_detect(names(topASE), "(fAD|fAI)")], permRanks_d)
-#   ) %>%
-#     t() %>%
-#     as_tibble()
-#   toc()
-#   ## 3384.696 sec elapsed
-#   set.seed(17)
-#   tic()
-#   fgsea_d <- mclapply(as.list(ranks_d), function(x){
-#     x %>%
-#       lapply(function(y){
-#         fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
-#       })
-#   }, mc.cores = cores) %>%
-#     set_names(colnames(ranks_d))
-#   toc()
-#   ## 4205.458 sec elapsed
-#   saveRDS(fgsea_d, file_d)
-# }
 ```
 
 ```{r}
@@ -564,12 +592,17 @@ mean_d <- lapply(pvals_d, function(sample){
     wilsonConf(chrList[[x]]) %>%
       mutate(chromosome = as.factor(chr))
   }) %>%
-    purrr::reduce(rbind) %>%
-    dplyr::select(chromosome, everything())
+    bind_rows() %>%
+    dplyr::select(chromosome, everything()) %>%
+    mutate(
+      adj.mean.p = p.adjust(mean.p, method = "bonf"),
+      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "lower"),
+      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "upper")
+    )
 }) 
 ```
 
-```{r, fig.height=15}
+```{r, fig.height=7.5}
 lapply(seq_along(mean_d), function(ind){
   x <- mean_d[[ind]]
   x %>%
@@ -578,10 +611,14 @@ lapply(seq_along(mean_d), function(ind){
       chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
     )
 }) %>%
-  purrr::reduce(rbind) %>%
+  bind_rows() %>%
   left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
-  ggplot(aes(sample, -log10(mean))) +
+  ggplot(aes(sample, -log10(adj.mean.p))) +
   geom_bar(stat = "identity", aes(fill = genotype)) +
+  geom_errorbar(aes(
+    ymax = -log10(adj.lower),
+    ymin = -log10(adj.upper)
+  ), width = 0.2) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
   facet_wrap(~ chromosome) +
   theme(
@@ -590,5 +627,6 @@ lapply(seq_along(mean_d), function(ind){
     axis.title.x = element_blank(),
     legend.position = "bottom"
   ) +
-  labs(y = "-log10(p)")
+  scale_fill_manual(values = compCols) +
+  labs(y = log10plab)
 ```
