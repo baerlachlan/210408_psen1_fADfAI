@@ -21,13 +21,27 @@ rule trim:
         	-o {output.R1} \
         	-O {output.R2} \
 			--qualified_quality_phred 20 \
-			--unqualified_percent_limit 100 \
 			--length_required 35 \
-			--complexity_threshold 100 \
-			--cut_front \
-			--cut_tail \
 			--trim_poly_g \
 			--thread 1 \
 			--html {output.html} \
 			--json /dev/null \
 		"""
+
+rule fastqc_trim:
+	input:
+		"02_trim/fastq/{SAMPLE}.fastq.gz"
+	output:
+		"02_trim/FastQC/{SAMPLE}_fastqc.zip",
+		"02_trim/FastQC/{SAMPLE}_fastqc.html"
+	params:
+		outDir = "02_trim/FastQC/"
+	conda:
+		"../envs/ase.yaml"
+	resources:
+		cpu = 1,
+		ntasks = 1,
+		mem_mb = 2000,
+		time = "00-01:00:00"
+	shell:
+		"fastqc -t {resources.cpu} -o {params.outDir} --noextract {input}"

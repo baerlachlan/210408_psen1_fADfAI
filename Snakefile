@@ -1,6 +1,6 @@
 #!/bin/bash
 
-## This script is based on the recommended gatk workflow for RNA-seq short variant discovery (SNPs + Indels):
+## This script follows the recommended gatk workflow for RNA-seq short variant discovery (SNPs + Indels):
 ## - https://gatk.broadinstitute.org/hc/en-us/articles/360035531192-RNAseq-short-variant-discovery-SNPs-Indels-
 
 ## Minor adjustments have been made as follows:
@@ -14,7 +14,6 @@
 ##   - It is better to therefore generate a set of known variants from our data than to use pre-defined ones in a database (dbSNP , Ensembl)
 ##   - The reasoning and process for this is located at https://gatk.broadinstitute.org/hc/en-us/articles/360035890531?id=44 (Section 3)
 
-## Lists for expanding
 SAMPLES = [
 	"1_KB_A10", "2_KB_A11", "3_KB_A1", "4_KB_A6",
 	"5_KB_A7", "6_KB_B11", "7_KB_B12", "8_KB_B3",
@@ -36,26 +35,27 @@ rule all:
 	input:
 		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("02_trim/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("03_align/FastQC/{SAMPLE}Aligned.sortedByCoord.out_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
+		expand("03_align/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		"03_align/featureCounts/genes.out",
-		expand("04_dedupUmis/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, EXT = FQC_EXT),
-		expand("12_geneiase/ase/{SAMPLE}.static.pval.tsv", SAMPLE = SAMPLES)
+		expand("05_markDuplicates/metrics/{SAMPLE}.tsv", SAMPLE = SAMPLES),
+		# expand("09_recalBases/recal/{SAMPLE}.analyzeCovariates.csv", SAMPLE = SAMPLES),
+        # expand("10_callSnvs/4_selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
+        # expand("12_aseReadCounter/{DIR}/{SAMPLE}.tsv", DIR = ["wasp", "nowasp"], SAMPLE = SAMPLES),
+        # expand("13_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE = SAMPLES)
 
 include: "smk/modules/refs.smk"
 include: "smk/modules/fastqc_raw.smk"
-include: "smk/modules/addUmi.smk"
+include: "smk/modules/addUmis.smk"
 include: "smk/modules/trim.smk"
-include: "smk/modules/fastqc_trim.smk"
 include: "smk/modules/align.smk"
-include: "smk/modules/fastqc_align.smk"
 include: "smk/modules/featureCounts.smk"
-include: "smk/modules/dedupUmis.smk"
-include: "smk/modules/fastqc_dedup.smk"
-include: "smk/modules/splitNCigar.smk"
-include: "smk/modules/addRG.smk"
-include: "smk/modules/knownSnvs.smk"
-include: "smk/modules/recalBases.smk"
-include: "smk/modules/callSnvs.smk"
-include: "smk/modules/wasp.smk"
-include: "smk/modules/aseReadCounter.smk"
-include: "smk/modules/geneiase.smk"
+include: "smk/modules/groupUmis.smk"
+include: "smk/modules/markDuplicates.smk"
+# include: "smk/modules/splitNCigar.smk"
+# include: "smk/modules/addRG.smk"
+# include: "smk/modules/dbsnp.smk"
+# include: "smk/modules/recalBases.smk"
+# include: "smk/modules/callSnvs.smk"
+# include: "smk/modules/wasp.smk"
+# include: "smk/modules/aseReadCounter.smk"
+# include: "smk/modules/geneiase.smk"

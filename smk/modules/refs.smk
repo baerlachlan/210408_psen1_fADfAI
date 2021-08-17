@@ -55,7 +55,7 @@ rule ref_dict:
 	resources:
 		cpu = 1,
 		ntasks = 1,
-		mem_mb = 1000,
+		mem_mb = 4000,
 		time = "00-00:10:00"
 	shell:
 		"gatk CreateSequenceDictionary -R {input}"
