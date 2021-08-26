@@ -62,7 +62,7 @@ cores <- availableCores() - 1
 ```
 
 ```{r}
-source(here("R/lbFuncs.R"))
+source("~/bioinformatics/bioToolkit/lbFuncs.R")
 ```
 
 ## Annotations
@@ -78,12 +78,13 @@ ensDb <- ah[["AH83189"]] ## Ens101
 transcripts <- transcripts(ensDb)
 txLen <- exonsBy(ensDb, "tx") %>%
   width() %>%
-  vapply(sum, integer(1))
+  vapply(sum, integer(1)) %>%
+  enframe(name = "tx_id", value = "length")
 mcols(transcripts) <- mcols(transcripts)[
   c("tx_id", "gene_id", "gc_content")
 ] %>%
   as.data.frame() %>%
-  mutate(length = txLen)
+  left_join(txLen)
 ```
 
 ```{r}
@@ -139,7 +140,7 @@ genoCols <- metadata$genotype %>%
 ```{r}
 counts <- read_tsv(here("03_align/featureCounts/genes.out")) %>%
   set_colnames(basename(colnames(.))) %>%
-  set_colnames(str_remove(colnames(.), "Aligned.sortedByCoord.out.bam"))
+  set_colnames(str_remove(colnames(.), ".bam"))
 ```
 
 ```{r}
@@ -149,9 +150,9 @@ minLib <- counts %>%
   min()
 minCPM <- as.vector(cpm(10, lib.size = minLib))
 minSamples <- metadata %>%
-  split(.$genotype) %>%
-  lapply(nrow) %>%
-  unlist() %>%
+  group_by(genotype) %>%
+  summarise(n = n()) %>%
+  pull(n) %>%
   min()
 dgeList <- counts %>%
   as.data.frame() %>%
@@ -197,8 +198,12 @@ cpm(dgeList, log = TRUE) %>%
 ## PCA
 
 ```{r}
-pca <- dgeList %>%
-  cpm(log = TRUE) %>%
+cpm <- dgeList %>%
+  cpm(log = TRUE)
+```
+
+```{r}
+pca <- cpm %>%
   t() %>%
   prcomp() 
 pcaVars <- percent_format(0.1)(summary(pca)$importance["Proportion of Variance",])
@@ -214,7 +219,7 @@ pca$x %>%
   geom_point(size = 2) +
   geom_text_repel(show.legend = FALSE) +
   stat_ellipse(geom = "polygon", alpha = 0.05, show.legend = FALSE) +
-  guides(fill = FALSE) +
+  guides(fill = "none") +
   scale_colour_manual(values = genoCols) +
   labs(
     x = paste0("PC1 (", pcaVars[["PC1"]], ")"),
@@ -285,7 +290,7 @@ With this criteria, the following genes were classified as DE:
 ```{r}
 topTables$`EOfAD-like/+` %>%
   dplyr::filter(DE) %>% 
-  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP) %>%
   mutate(
     logCPM = formatC(logCPM, digits = 2, format = "f"),
     logFC = formatC(logFC, digits = 2, format = "f"),
@@ -305,7 +310,7 @@ topTables$`EOfAD-like/+` %>%
   )
 topTables$`fAI-like/+` %>%
   dplyr::filter(DE) %>% 
-  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP) %>%
   mutate(
     logCPM = formatC(logCPM, digits = 2, format = "f"),
     logFC = formatC(logFC, digits = 2, format = "f"),
@@ -352,7 +357,7 @@ topTables %>%
 
 ### GC content
 
-```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Some bias was observed for both comparisons. In particular, the fAI genotype shows a well-documented pattern of GC bias, whereby both low and high GC proportions are affected. This may be of concern for this dataset.*"}
+```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Differentially expressed genes are labelled red. Small biases were observed for both comparisons. In particular, the fAI genotype shows a well-documented pattern of GC bias, whereby both low and high GC proportions are affected.*"}
 topTables %>%
   bind_rows() %>%
   mutate(stat = -sign(logFC)*log10(PValue)) %>%
@@ -375,7 +380,7 @@ topTables %>%
 
 ### Gene length
 
-```{r, fig.cap="*Gene length bias for differential expression. Gene length is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. No bias is observed for either comparison.*"}
+```{r, fig.cap="*Gene length bias for differential expression. Gene length is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Differentially expressed genes are labelled red. Minimal bias is observed for the fAD genotype, but the fAI genotype shows a bias for larger genes.*"}
 topTables %>%
   bind_rows() %>%
   mutate(stat = -sign(logFC)*log10(PValue)) %>%
@@ -401,27 +406,36 @@ topTables %>%
 
 Conditional Quantile Normalisation (CQN) is a procedure that can account for GC content and length biases in differential expression and is implemented with package `cqn`.
 It does this by making by calculating offset values that can be incorporated into the GLM.
-As GC content was noted as being of concern, but length showed no bias, only GC content was used to calculate the offsets.
-The `glm.offset` values from the output of `cqn` were added to the original `DGEList` object.
+Both GC content and length were noted as being of concern and were therefore used to calculate offsets.
+The resulting `glm.offset` values from the output of `cqn` were added to the original `DGEList` object.
 
 ```{r, results='hide'}
+# cqn <- cqn(
+#   counts = dgeList$counts,
+#   x = dgeList$genes$gc_content,
+#   lengths = rep(1000, times = nrow(dgeList)),
+#   sizeFactors = dgeList$samples$lib.size,
+#   lengthMethod = "fixed"
+# )
 cqn <- cqn(
   counts = dgeList$counts,
   x = dgeList$genes$gc_content,
-  lengths = rep(1000, times = nrow(dgeList)),
-  sizeFactors = dgeList$samples$lib.size,
-  lengthMethod = "fixed"
+  lengths = dgeList$genes$length,
+  sizeFactors = dgeList$samples$lib.size
 )
 ```
 
-```{r, fig.width=6, fig.cap="*Model fits for GC content under the CQN model. *"}
+```{r, fig.cap="*Model fits for GC content and gene length under the CQN model. *"}
+par(mfrow = c(1, 2))
 cqnplot(cqn, n = 1, xlab = "GC Content", col = genoCols)
+cqnplot(cqn, n = 2, xlab = "Length", col = genoCols)
 legend(
   "bottomright",
   legend = levels(metadata$genotype),
   col = genoCols,
   lty = 1
 )
+par(mfrow = c(1, 1))
 ```
 
 ```{r}
@@ -492,7 +506,7 @@ topTables_cqn <- colnames(design)[2:3] %>%
 ```{r}
 topTables_cqn$`EOfAD-like/+` %>%
   dplyr::filter(DE) %>% 
-  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP) %>%
   mutate(
     logCPM = formatC(logCPM, digits = 2, format = "f"),
     logFC = formatC(logFC, digits = 2, format = "f"),
@@ -512,7 +526,7 @@ topTables_cqn$`EOfAD-like/+` %>%
   )
 topTables_cqn$`fAI-like/+` %>%
   dplyr::filter(DE) %>% 
-  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP) %>%
+  dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP) %>%
   mutate(
     logCPM = formatC(logCPM, digits = 2, format = "f"),
     logFC = formatC(logFC, digits = 2, format = "f"),
@@ -555,7 +569,7 @@ topTables_cqn %>%
 
 ### GC content
 
-```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. There was still a small amount of residual bias post CQN, but an improvement was noted, particulary for the fAI genotype.*"}
+```{r, fig.cap="*GC content bias for differential expression. GC content is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Differentially expressed genes are labelled red. No improvement of GC bias was observed post-CQN. In fact, GC bias appeared worse than pre-CQN.*"}
 topTables_cqn %>%
   bind_rows() %>%
   mutate(stat = -sign(logFC)*log10(PValue)) %>%
@@ -576,10 +590,36 @@ topTables_cqn %>%
   theme(legend.position = "none")
 ```
 
+### Gene length
+
+```{r, fig.cap="*Gene length bias for differential expression. Gene length is shown against the ranking statistic, calculated by -log10(p) multiple by the sign of logFC. Differentially expressed genes are labelled red. No improvement of gene length bias was observed for either genotype post-CQN.*"}
+topTables_cqn %>%
+  bind_rows() %>%
+  mutate(stat = -sign(logFC)*log10(PValue)) %>%
+  ggplot(aes(length, stat)) +
+  geom_point(aes(colour = DE), alpha = 0.4) +
+  geom_smooth(se = FALSE) +
+  facet_wrap(~coef)  +
+  geom_text_repel(
+    aes(label = gene_name, colour = DE),
+    data = . %>% dplyr::filter(DE)
+  ) +
+  labs(
+    x = "GC length",
+    y = "Ranking Statistic"
+  ) +
+  coord_cartesian(ylim = c(-10, 10)) +
+  scale_x_log10(labels = comma) +
+  scale_colour_manual(values = deCols) +
+  theme(legend.position = "none")
+```
+
 # Results
 
+Conditional quantile normalised data was **not** chosen for this analysis as it did not improve gene GC and length biases.
+
 ```{r, fig.cap="*Volcano plots showing -log10(p) against logFC. Genes determined to be DE are coloured red.*"}
-topTables_cqn %>%
+topTables %>%
   bind_rows() %>%
   ggplot(aes(logFC, -log10(PValue), colour = DE)) +
   geom_point(alpha = 0.4) +
@@ -617,12 +657,12 @@ faiComp <- metadata %>%
 ```
 
 ```{r}
-deGenes <- lapply(topTables_cqn, function(x){
+deGenes <- lapply(topTables, function(x){
   dplyr::filter(x, DE) %>%
     pull(gene_id)
 })
 deCpmPlots <- lapply(seq_along(deGenes), function(x){
-  cpms <- cpm_cqn[deGenes[[x]],] %>% 
+  cpms <- cpm[deGenes[[x]],] %>% 
     as.data.frame() %>% 
     rownames_to_column("gene_id") %>% 
     gather(key = "sample", value = logCPM, -gene_id) %>% 
@@ -664,12 +704,12 @@ deCpmPlots <- lapply(seq_along(deGenes), function(x){
 
 A set of `r length(deGenes[[1]])` were classified as DE due to the EOfAD-like/+ genotype.
 The highest ranked genes by p-value are shown in the following table.
-Interestingly, `r nrow(dplyr::filter(topTables_cqn[[1]], DE, chromosome == 17))` of these genes were located on chromosome 17, the same chromosome as the mutation.
+Interestingly, `r nrow(dplyr::filter(topTables[[1]], DE, chromosome == 17))` of these genes were located on chromosome 17, the same chromosome as the mutation.
 
 ```{r}
-topTables_cqn$`EOfAD-like/+` %>%
+topTables$`EOfAD-like/+` %>%
   dplyr::slice(1:1000) %>%
-  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
+  dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
   mutate(
     logCPM = formatC(logCPM, digits = 2, format = "f"),
     logFC = formatC(logFC, digits = 2, format = "f"),
@@ -687,7 +727,7 @@ topTables_cqn$`EOfAD-like/+` %>%
 ```
 
 ```{r, fig.cap="*Heatmap of DE genes in the comparison between EOfAD-like/+ and WT genotypes. Values a logCPM after CQN.*"}
-cpm_cqn[deGenes$`EOfAD-like/+`,] %>%
+cpm[deGenes$`EOfAD-like/+`,] %>%
   as.data.frame() %>%
   dplyr::select(all_of(fadComp)) %>%
   set_rownames(idToSym(rownames(.), genes)) %>%
@@ -712,12 +752,12 @@ deCpmPlots[[1]]
 
 A set of `r length(deGenes[[2]])` were classified as DE due to the fAI-like/+ genotype.
 The highest ranked genes by p-value are shown in the following table.
-The location of DE genes followed a similar trend to the Alzheimer's mutant with `r nrow(dplyr::filter(topTables_cqn[[2]], DE, chromosome == 17))` genes located on chromosome 17.
+The location of DE genes followed a similar trend to the Alzheimer's mutant with `r nrow(dplyr::filter(topTables[[2]], DE, chromosome == 17))` genes located on chromosome 17.
 
 ```{r}
-topTables_cqn$`fAI-like/+` %>%
+topTables$`fAI-like/+` %>%
   dplyr::slice(1:1000) %>%
-  dplyr::select(gene_id, gene_name, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
+  dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
   mutate(
     logCPM = formatC(logCPM, digits = 2, format = "f"),
     logFC = formatC(logFC, digits = 2, format = "f"),
@@ -735,7 +775,7 @@ topTables_cqn$`fAI-like/+` %>%
 ```
 
 ```{r, fig.cap="*Heatmap of DE genes in the comparison between fAI-like/+ and WT genotypes. Values a logCPM after CQN.*"}
-cpm_cqn[deGenes$`fAI-like/+`,] %>%
+cpm[deGenes$`fAI-like/+`,] %>%
   as.data.frame() %>%
   dplyr::select(all_of(faiComp)) %>%
   set_rownames(idToSym(rownames(.), genes)) %>%
@@ -764,6 +804,7 @@ Final results were exported as Rds files for further analysis.
 saveRDS(topTables, here("files/topTables.Rds"))
 saveRDS(topTables_cqn, here("files/topTables_cqn.Rds"))
 ```
+
 ```{r}
 sessionInfo() %>%
   pander()
