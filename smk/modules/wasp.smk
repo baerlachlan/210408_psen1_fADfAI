@@ -1,15 +1,15 @@
 rule findIntersecting:
 	input:
-		bam = "08_recalBases/bam/{SAMPLE}.bam",
-		snpDir = "10_wasp/snvs/{SAMPLE}"
+		bam = "09_recalBases/bam/{SAMPLE}.bam",
+		snpDir = "11_wasp/1_snvs/{SAMPLE}"
 	output:
-		fq1 = temp("10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq1.gz"),
-		fq2 = temp("10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq2.gz"),
-		single = temp("10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.remap.single.fq.gz"),
-		to_remap = temp("10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.to.remap.bam"),
-		keep_intersect = temp("10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.keep.bam")
+		fq1 = temp("11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq1.gz"),
+		fq2 = temp("11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq2.gz"),
+		single = temp("11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.remap.single.fq.gz"),
+		to_remap = temp("11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.to.remap.bam"),
+		keep_intersect = temp("11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.keep.bam")
 	params:
-		outDir = temp(directory("10_wasp/findIntersecting/{SAMPLE}"))
+		outDir = temp(directory("11_wasp/2_findIntersecting/{SAMPLE}"))
 	conda:
 		"../envs/wasp.yaml"
 	resources:
@@ -29,16 +29,18 @@ rule findIntersecting:
 
 rule remap:
 	input:
-		fq1 = "10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq1.gz",
-		fq2 = "10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq2.gz",
+		fq1 = "11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq1.gz",
+		fq2 = "11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.remap.fq2.gz",
 		starIndex = "refs/star/"
 	output:
-		remapped_unsorted = temp("10_wasp/remap/{SAMPLE}Aligned.out.bam"),
-		remapped_sorted = temp("10_wasp/remap/{SAMPLE}sorted.out.bam"),
-		index = temp("10_wasp/remap/{SAMPLE}sorted.out.bam.bai")
+		remapped_unsorted = temp("11_wasp/3_remap/{SAMPLE}Aligned.out.bam"),
+		remapped_sorted = temp("11_wasp/3_remap/{SAMPLE}sorted.out.bam"),
+		index = temp("11_wasp/3_remap/{SAMPLE}sorted.out.bam.bai"),
+		STARgenome = temp(directory("11_wasp/3_remap/{SAMPLE}_STARgenome")),
+		STARpass1 = temp(directory("11_wasp/3_remap/{SAMPLE}_STARpass1"))
 	params:
 		overhang = READ_LEN-1,
-		bname = "10_wasp/remap/{SAMPLE}"
+		bname = "11_wasp/3_remap/{SAMPLE}"
 	conda:
 		"../envs/wasp.yaml"
 	resources:
@@ -58,9 +60,9 @@ rule remap:
 			--twopassMode Basic \
 			--outFileNamePrefix {params.bname}
 
-		mkdir -p 10_wasp/remap/log
-		mv {params.bname}*out 10_wasp/remap/log
-		mv {params.bname}*tab 10_wasp/remap/log
+		mkdir -p 11_wasp/3_remap/log
+		mv {params.bname}*out 11_wasp/3_remap/log
+		mv {params.bname}*tab 11_wasp/3_remap/log
 
 		samtools sort -o {output.remapped_sorted} {output.remapped_unsorted}
 		samtools index {output.remapped_sorted}
@@ -68,11 +70,11 @@ rule remap:
 
 rule filterRemapped:
 	input:
-		to_remap = "10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.to.remap.bam",
-		remapped_unsorted = "10_wasp/remap/{SAMPLE}Aligned.out.bam",
-		remapped_sorted = "10_wasp/remap/{SAMPLE}sorted.out.bam"
+		to_remap = "11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.to.remap.bam",
+		remapped_unsorted = "11_wasp/3_remap/{SAMPLE}Aligned.out.bam",
+		remapped_sorted = "11_wasp/3_remap/{SAMPLE}sorted.out.bam"
 	output:
-		keep_filter = temp("10_wasp/filterRemapped/{SAMPLE}.keep.bam")
+		keep_filter = temp("11_wasp/4_filterRemapped/{SAMPLE}.keep.bam")
 	conda:
 		"../envs/wasp.yaml"
 	resources:
@@ -90,11 +92,12 @@ rule filterRemapped:
 
 rule merge:
 	input:
-		keep_filter = "10_wasp/filterRemapped/{SAMPLE}.keep.bam",
-		keep_intersect = "10_wasp/findIntersecting/{SAMPLE}/{SAMPLE}.keep.bam"
+		keep_filter = "11_wasp/4_filterRemapped/{SAMPLE}.keep.bam",
+		keep_intersect = "11_wasp/2_findIntersecting/{SAMPLE}/{SAMPLE}.keep.bam"
 	output:
-		keep_merged = temp("10_wasp/merge/{SAMPLE}.keep.merge.bam"),
-		keep_sorted = temp("10_wasp/merge/{SAMPLE}.keep.merge.sort.bam")
+		keep_merged = temp("11_wasp/5_merge/{SAMPLE}.keep.merge.bam"),
+		keep_sorted = temp("11_wasp/5_merge/{SAMPLE}.keep.merge.sort.bam"),
+		keep_sortedIndex = temp("11_wasp/5_merge/{SAMPLE}.keep.merge.sort.bam.bai")
 	conda:
 		"../envs/wasp.yaml"
 	resources:

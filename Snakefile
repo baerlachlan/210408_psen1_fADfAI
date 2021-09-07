@@ -37,11 +37,11 @@ rule all:
 		expand("02_trim/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		expand("03_align/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
 		"03_align/featureCounts/genes.out",
-		expand("05_markDuplicates/metrics/{SAMPLE}.tsv", SAMPLE = SAMPLES),
+		expand("08_dbsnp/4_selected/{SAMPLE}_snvs.vcf.gz", SAMPLE = SAMPLES),
 		# expand("09_recalBases/recal/{SAMPLE}.analyzeCovariates.csv", SAMPLE = SAMPLES),
-        # expand("10_callSnvs/4_selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
-        # expand("12_aseReadCounter/{DIR}/{SAMPLE}.tsv", DIR = ["wasp", "nowasp"], SAMPLE = SAMPLES),
-        # expand("13_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE = SAMPLES)
+		# expand("10_callSnvs/4_selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
+		# expand("12_aseReadCounter/{DIR}/{SAMPLE}.tsv", DIR = ["wasp", "nowasp"], SAMPLE = SAMPLES),
+		# expand("13_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE = SAMPLES)
 
 include: "smk/modules/refs.smk"
 include: "smk/modules/fastqc_raw.smk"
@@ -51,11 +51,11 @@ include: "smk/modules/align.smk"
 include: "smk/modules/featureCounts.smk"
 include: "smk/modules/groupUmis.smk"
 include: "smk/modules/markDuplicates.smk"
-# include: "smk/modules/splitNCigar.smk"
-# include: "smk/modules/addRG.smk"
-# include: "smk/modules/dbsnp.smk"
-# include: "smk/modules/recalBases.smk"
-# include: "smk/modules/callSnvs.smk"
+include: "smk/modules/splitNCigar.smk"
+include: "smk/modules/addRG.smk"
+include: "smk/modules/dbsnp.smk"
+include: "smk/modules/recalBases.smk"
+include: "smk/modules/callSnvs.smk"
 # include: "smk/modules/wasp.smk"
 # include: "smk/modules/aseReadCounter.smk"
 # include: "smk/modules/geneiase.smk"

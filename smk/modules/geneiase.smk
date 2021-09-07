@@ -1,8 +1,8 @@
 rule geneiase:
 	input:
-		"12_geneiase/counts/{SAMPLE}.static.tsv"
+		"13_geneiase/1_counts/{SAMPLE}.static.tsv"
 	output:
-		"12_geneiase/ase/{SAMPLE}.static.pval.tsv"
+		"13_geneiase/2_ase/{SAMPLE}.static.pval.tsv"
 	conda:
 		"../envs/geneiase.yaml"
 	resources:
