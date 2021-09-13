@@ -1,14 +1,14 @@
 rule addUmis:
 	input:
-		R1 = "00_rawData/fastq/{SAMPLE}_R1.fastq.gz",
-		R2 = "00_rawData/fastq/{SAMPLE}_R2.fastq.gz",
-		UMI = "00_rawData/fastq/{SAMPLE}_I1.fastq.gz"
+		R1 = "00_rawData/fastq/{SAMPLE}_{LANE}_R1.fastq.gz",
+		R2 = "00_rawData/fastq/{SAMPLE}_{LANE}_R2.fastq.gz",
+		UMI = "00_rawData/fastq/{SAMPLE}_{LANE}_I1.fastq.gz"
 	output:
-		R1 = temp("01_addUmi/fastq/{SAMPLE}_R1.fastq.gz"),
-		R2 = temp("01_addUmi/fastq/{SAMPLE}_R2.fastq.gz"),
-		UMI1 = temp("01_addUmi/fastq/{SAMPLE}_I1.fastq.gz"),
-		UMI2 = temp("01_addUmi/fastq/{SAMPLE}_I2.fastq.gz"),
-		html = "01_addUmi/log/{SAMPLE}.html"
+		R1 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_R1.fastq.gz"),
+		R2 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_R2.fastq.gz"),
+		UMI1 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_I1.fastq.gz"),
+		UMI2 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_I2.fastq.gz"),
+		html = "01_addUmi/log/{SAMPLE}_{LANE}.html"
 	conda:
 		"../envs/ase.yaml"
 	resources:

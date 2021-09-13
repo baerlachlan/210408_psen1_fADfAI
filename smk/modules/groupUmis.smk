@@ -3,11 +3,11 @@
 ## Picard MarkDuplicates is preferred over Umi-tools as it allows for random selection of the representative read avoiding mapping bias
 rule groupUmis:
 	input:
-		bam = "03_align/bam/{SAMPLE}.bam",
-		bamIndex = "03_align/bam/{SAMPLE}.bam.bai"
+		bam = "04_addRG/bam/{SAMPLE}_{LANE}.bam",
+		bamIndex = "04_addRG/bam/{SAMPLE}_{LANE}.bai"
 	output:
-		bam = "04_groupUmis/bam/{SAMPLE}.bam",
-		bamIndex = "04_groupUmis/bam/{SAMPLE}.bam.bai"
+		bam = "05_groupUmis/bam/{SAMPLE}_{LANE}.bam",
+		bamIndex = "05_groupUmis/bam/{SAMPLE}_{LANE}.bam.bai"
 	conda:
 		"../envs/ase.yaml"
 	resources:

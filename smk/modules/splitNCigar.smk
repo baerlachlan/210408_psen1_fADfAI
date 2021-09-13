@@ -1,14 +1,14 @@
 rule splitNCigar:
 	input:
-		bam = "05_markDuplicates/bam/{SAMPLE}.bam",
-		bamIndex = "05_markDuplicates/bam/{SAMPLE}.bai",
+		bam = "06_markDuplicates/bam/{SAMPLE}.bam",
+		bamIndex = "06_markDuplicates/bam/{SAMPLE}.bai",
 		refFa = "refs/Danio_rerio.GRCz11.dna.primary_assembly.fa",
 		refIndex = "refs/Danio_rerio.GRCz11.dna.primary_assembly.fa.fai",
 		refDict = "refs/Danio_rerio.GRCz11.dna.primary_assembly.dict"
 	output:
-		bam = temp("06_splitNCigar/bam/{SAMPLE}.bam"),
-		bamIndex = temp("06_splitNCigar/bam/{SAMPLE}.bai"),
-		samstats = "06_splitNCigar/samstats/{SAMPLE}.tsv"
+		bam = temp("07_splitNCigar/bam/{SAMPLE}.bam"),
+		bamIndex = temp("07_splitNCigar/bam/{SAMPLE}.bai"),
+		samstats = "07_splitNCigar/samstats/{SAMPLE}.tsv"
 	conda:
 		"../envs/ase.yaml"
 	resources:

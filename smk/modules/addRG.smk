@@ -2,12 +2,12 @@
 ## An explanation of this is found at https://gatk.broadinstitute.org/hc/en-us/articles/360035890671-Read-groups
 rule addRG:
 	input:
-		bam = "06_splitNCigar/bam/{SAMPLE}.bam",
-		bamIndex = "06_splitNCigar/bam/{SAMPLE}.bai"
+		bam = "03_align/bam/{SAMPLE}_{LANE}.bam",
+		bamIndex = "03_align/bam/{SAMPLE}_{LANE}.bam.bai"
 	output:
-		bam = temp("07_addRG/bam/{SAMPLE}.bam"),
-		bamIndex = temp("07_addRG/bam/{SAMPLE}.bai"),
-		samstats = "07_addRG/samstats/{SAMPLE}.tsv"
+		bam = temp("04_addRG/bam/{SAMPLE}_{LANE}.bam"),
+		bamIndex = temp("04_addRG/bam/{SAMPLE}_{LANE}.bai"),
+		samstats = "04_addRG/samstats/{SAMPLE}_{LANE}.tsv"
 	conda:
 		"../envs/ase.yaml"
 	resources:
@@ -22,11 +22,11 @@ rule addRG:
     		-I {input.bam} \
    			-O {output.bam} \
     		-SORT_ORDER coordinate \
-    		-RGID default \
-    		-RGLB default \
+    		-RGID {wildcards.SAMPLE}_{wildcards.LANE} \
+			-RGPU null \
     		-RGSM {wildcards.SAMPLE} \
-			-RGPU default \
     		-RGPL ILLUMINA \
+    		-RGLB null \
     		-CREATE_INDEX True
 
 		samtools stats -d {output.bam} > {output.samstats}

@@ -1,24 +1,24 @@
 rule align:
 	input:
-		R1 = "02_trim/fastq/{SAMPLE}_R1.fastq.gz",
-		R2 = "02_trim/fastq/{SAMPLE}_R2.fastq.gz",
+		R1 = "02_trim/fastq/{SAMPLE}_{LANE}_R1.fastq.gz",
+		R2 = "02_trim/fastq/{SAMPLE}_{LANE}_R2.fastq.gz",
 		starIndex = "refs/star/"
 	output:
-		bamRenamed = temp("03_align/bam/{SAMPLE}.bam"),
-		bamIndex = temp("03_align/bam/{SAMPLE}.bam.bai"),
-		STARgenome = temp(directory("03_align/bam/{SAMPLE}_STARgenome")),
-		STARpass1 = temp(directory("03_align/bam/{SAMPLE}_STARpass1"))
+		bamRenamed = temp("03_align/bam/{SAMPLE}_{LANE}.bam"),
+		bamIndex = temp("03_align/bam/{SAMPLE}_{LANE}.bam.bai"),
+		STARgenome = temp(directory("03_align/bam/{SAMPLE}_{LANE}_STARgenome")),
+		STARpass1 = temp(directory("03_align/bam/{SAMPLE}_{LANE}_STARpass1"))
 	params:
 		overhang = READ_LEN-1,
-		bname = "03_align/bam/{SAMPLE}",
-		bamBeforeRename = "03_align/bam/{SAMPLE}Aligned.sortedByCoord.out.bam"
+		bname = "03_align/bam/{SAMPLE}_{LANE}",
+		bamBeforeRename = "03_align/bam/{SAMPLE}_{LANE}Aligned.sortedByCoord.out.bam"
 	conda:
 		"../envs/ase.yaml"
 	resources:
 		cpu = 16,
 		ntasks = 1,
 		mem_mb = 32000,
-		time = "00-05:00:00"
+		time = "00-02:00:00"
 	shell:
 		"""
 		STAR \

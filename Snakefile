@@ -22,8 +22,8 @@ SAMPLES = [
 	"17_KB_C1", "18_KB_C2", "19_KB_C3", "20_KB_C4",
 	"21_KB_C5", "22_KB_C6", "23_KB_C7", "24_KB_C8"
 ]
+LANE_ID = ["L001", "L002"]
 PAIR_ID = ["R1", "R2"]
-REF_EXT = ["dict", "fa.fai"]
 FQC_EXT = ["zip", "html"]
 VCF_EXT = ["vcf.gz", "vcf.gz.tbi"]
 
@@ -33,13 +33,13 @@ READ_LEN = 100
 
 rule all:
 	input:
-		expand("00_rawData/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("02_trim/FastQC/{SAMPLE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		expand("03_align/FastQC/{SAMPLE}_fastqc.{EXT}", SAMPLE = SAMPLES, PAIR = PAIR_ID, EXT = FQC_EXT),
-		"03_align/featureCounts/genes.out",
+		expand("00_rawData/FastQC/{SAMPLE}_{LANE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, LANE = LANE_ID, PAIR = PAIR_ID, EXT = FQC_EXT),
+		expand("02_trim/FastQC/{SAMPLE}_{LANE}_{PAIR}_fastqc.{EXT}", SAMPLE = SAMPLES, LANE = LANE_ID, PAIR = PAIR_ID, EXT = FQC_EXT),
+		expand("03_align/FastQC/{SAMPLE}_{LANE}_fastqc.{EXT}", SAMPLE = SAMPLES, LANE = LANE_ID, PAIR = PAIR_ID, EXT = FQC_EXT),
+		# "03_align/featureCounts/genes.out",
 		expand("08_dbsnp/4_selected/{SAMPLE}_snvs.vcf.gz", SAMPLE = SAMPLES),
-		# expand("09_recalBases/recal/{SAMPLE}.analyzeCovariates.csv", SAMPLE = SAMPLES),
-		# expand("10_callSnvs/4_selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
+		expand("09_recalBases/recal/{SAMPLE}.analyzeCovariates.csv", SAMPLE = SAMPLES),
+		expand("10_callSnvs/4_selected/{SAMPLE}.vcf.gz", SAMPLE = SAMPLES),
 		# expand("12_aseReadCounter/{DIR}/{SAMPLE}.tsv", DIR = ["wasp", "nowasp"], SAMPLE = SAMPLES),
 		# expand("13_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE = SAMPLES)
 
@@ -48,11 +48,11 @@ include: "smk/modules/fastqc_raw.smk"
 include: "smk/modules/addUmis.smk"
 include: "smk/modules/trim.smk"
 include: "smk/modules/align.smk"
-include: "smk/modules/featureCounts.smk"
+include: "smk/modules/addRG.smk"
 include: "smk/modules/groupUmis.smk"
 include: "smk/modules/markDuplicates.smk"
+# include: "smk/modules/featureCounts.smk"
 include: "smk/modules/splitNCigar.smk"
-include: "smk/modules/addRG.smk"
 include: "smk/modules/dbsnp.smk"
 include: "smk/modules/recalBases.smk"
 include: "smk/modules/callSnvs.smk"
