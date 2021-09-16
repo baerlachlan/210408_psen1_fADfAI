@@ -34,9 +34,6 @@ files/fgsea*.Rds
 01_addUmi/log/*
 02_trim/log/*
 03_align/log/*
-04_dedupUmis/log/*
-10_wasp/*
-11_aseReadCounter/*
-14_aseReadCounts/*
+11_wasp/*
 *.static.tsv
 R/psen1_3way_RNA-seqAnalysis.Rmd
