@@ -503,22 +503,22 @@ Additionally, for RNA-seq data, `GATK` recommends [specific hard filters](https:
 Variants were removed with the following filters:
 
 - QualByDepth: QD < 2.0
-    - Variant confidence (QUAL field) divided by the unfiltered depth of non-homozygous reference samples.
-    Removing variants that have a low QD normalises the variant quality and avoids inflation caused by deep coverage.
+- Variant confidence (QUAL field) divided by the unfiltered depth of non-homozygous reference samples.
+Removing variants that have a low QD normalises the variant quality and avoids inflation caused by deep coverage.
 - FisherStrand: FS > 60.0
-    - The Phred-scaled probability there there is strand bias at the site.
-    Strand bias indicates whether the alternate allele was seen more or less often on the forward or reverse strand than the reference allele.
-    When there is little to no strand bias at the site, the FS value is close to 0.
+- The Phred-scaled probability there there is strand bias at the site.
+Strand bias indicates whether the alternate allele was seen more or less often on the forward or reverse strand than the reference allele.
+When there is little to no strand bias at the site, the FS value is close to 0.
 - StrandOddsRatio: SOR > 4.0
-    - An alternative way to estimate strand bias using a test similar to the symmetric odds ratio test.
+- An alternative way to estimate strand bias using a test similar to the symmetric odds ratio test.
 - RMSMappingQuality: MQ < 40.0
-    - Root mean square mapping quality over all the reads at the site.
+- Root mean square mapping quality over all the reads at the site.
 - MappingQualityRankSumTest: MQRankSum < -12.5
-    - u-based z-approximation from the Rank Sum Test for mapping qualities.
-    This compares the mapping qualities of the reads supporting the reference allele and the alternate allele.
+- u-based z-approximation from the Rank Sum Test for mapping qualities.
+This compares the mapping qualities of the reads supporting the reference allele and the alternate allele.
 - ReadPosRankSumTest: ReadPosRankSum < -8.0
-    - u-based z-approximation from the Rank Sum Test for site position within reads.
-    This compares whether the positions of the reference and alternate alleles are different within the reads.
+- u-based z-approximation from the Rank Sum Test for site position within reads.
+This compares whether the positions of the reference and alternate alleles are different within the reads.
 
 ```{r}
 calledMetrics <- list.files(
@@ -1159,7 +1159,8 @@ aseRCByGene <- lapply(seq_along(aseRC), function(x){
   aseRC[[x]][exonOverlaps[[x]]$snvInd,] %>%
     cbind(gene = names(exons[exonOverlaps[[x]]$geneInd])) %>%
     as_tibble()
-})
+}) %>% 
+  set_names(names(aseRC))
 ```
 
 ```{r}
@@ -1272,6 +1273,22 @@ lapply(seq_along(staticCounts), function(x){
     write_tsv(staticCounts[[x]], path)
   }
 })
+```
+
+The final quality controlled ASE count data was also exported in case it was needed in further analysis.
+
+```{r}
+path <- here("files/aseRC.Rds")
+if (!file.exists(path)) {
+  saveRDS(aseRC, path)
+}
+```
+
+```{r}
+path <- here("files/aseRCByGene.Rds")
+if (!file.exists(path)) {
+  saveRDS(aseRC, path)
+}
 ```
 
 # Session information
