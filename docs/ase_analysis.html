@@ -66,6 +66,7 @@ if (window.hljs) {
 
 
 
+<link rel="stylesheet" href="styles.css" type="text/css" />
 
 
 
@@ -368,7 +369,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">Allele Specific Expression Analysis</h1>
 <h4 class="author">Lachlan Baer</h4>
-<h4 class="date">28 July, 2021</h4>
+<h4 class="date">22 September, 2021</h4>
 
 </div>
 
@@ -398,7 +399,10 @@ div.tocify {
 <pre class="r"><code>if (interactive()) setwd(here::here())
 theme_set(theme_bw())
 cores &lt;- availableCores() - 2</code></pre>
-<pre class="r"><code>source(here(&quot;R/lbFuncs.R&quot;))</code></pre>
+<pre class="r"><code>source(&quot;~/bioinformatics/bioToolkit/lbFuncs.R&quot;)</code></pre>
+<pre class="r"><code>## Select base directory for the project
+projDir &lt;- here()
+# projDir &lt;- &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv&quot;</code></pre>
 <div id="ensdb" class="section level2">
 <h2>EnsDb</h2>
 <pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
@@ -409,14 +413,27 @@ genes &lt;- genes(ensDb)
 mcols(genes) &lt;- mcols(genes)[
   c(&quot;gene_id&quot;, &quot;gene_name&quot;, &quot;gene_biotype&quot;, &quot;entrezid&quot;)
 ]
-exons &lt;- exonsBy(ensDb, by = &quot;gene&quot;)</code></pre>
+exons &lt;- exonsBy(ensDb, by = &quot;gene&quot;)
+drChrs &lt;- seq(1:25)</code></pre>
+<pre class="r"><code>chrGenes &lt;- genes %&gt;%
+  as_tibble() %&gt;%
+  dplyr::filter(seqnames %in% drChrs) %&gt;%
+  droplevels() %&gt;%
+  split(.$seqnames) %&gt;%
+  lapply(pull, gene_id) %&gt;%
+  set_names(paste0(&quot;chr&quot;, names(.)))</code></pre>
+<pre class="r"><code>chrGenes_df &lt;- chrGenes %&gt;%
+  lapply(list) %&gt;%
+  as_tibble() %&gt;%
+  pivot_longer(cols = everything(), names_to = &quot;chr&quot;, values_to= &quot;feat&quot;) %&gt;%
+  unnest(feat)</code></pre>
 </div>
 </div>
 <div id="load-data" class="section level1">
 <h1>Load data</h1>
 <div id="metadata" class="section level2">
 <h2>Metadata</h2>
-<pre class="r"><code>metadata &lt;- read_csv(here(&quot;files/samples.csv&quot;)) %&gt;%
+<pre class="r"><code>metadata &lt;- read_csv(file.path(projDir, &quot;files/samples.csv&quot;)) %&gt;%
   dplyr::select(-sample) %&gt;%
   dplyr::rename(sample = basename, genotype = Genotype) %&gt;%
   ## We need some sample aliases that follow R naming conventions
@@ -1108,31 +1125,27 @@ wt9
 </tr>
 </tbody>
 </table>
-<pre class="r"><code>genotypes &lt;- unique(metadata$genotype) %&gt;%
-  as.vector() %&gt;%
-  set_names(., .)
-fad &lt;- metadata$alias %&gt;%
-  str_detect(&quot;fAD&quot;)
-fai &lt;- metadata$alias %&gt;%
-  str_detect(&quot;fAI&quot;)
-wt &lt;- metadata$alias %&gt;%
-  str_detect(&quot;WT&quot;)</code></pre>
+<pre class="r"><code># genotypes &lt;- unique(metadata$genotype) %&gt;%
+#   as.vector() %&gt;%
+#   set_names(., .)
+# fad &lt;- metadata$alias %&gt;%
+#   str_detect(&quot;fAD&quot;)
+# fai &lt;- metadata$alias %&gt;%
+#   str_detect(&quot;fAI&quot;)
+# wt &lt;- metadata$alias %&gt;%
+#   str_detect(&quot;WT&quot;)</code></pre>
 </div>
-<div id="differential-expression" class="section level2">
-<h2>Differential Expression</h2>
-<pre class="r"><code>topDE &lt;- readRDS(here(&quot;files/toptable_raw.rds&quot;)) %&gt;%
-  set_names(c(&quot;fAD&quot;, &quot;fAI&quot;))</code></pre>
 </div>
-<div id="geneiase" class="section level2">
-<h2>GeneiASE</h2>
+<div id="allele-specific-expression" class="section level1">
+<h1>Allele specific expression</h1>
+<p>Allele specific expression testing was performed at the gene-level with <code>GeneiASE</code> software. Genes were classified as showing allele specific expression (ASE) if they had a FDR-adjusted p-value &lt; 0.05.</p>
 <pre class="r"><code>files &lt;- list.files(
-  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/12_geneiase/ase&quot;,
+  file.path(projDir, &quot;13_geneiase/2_ase&quot;),
   full.names = TRUE
 )
 samples &lt;- basename(files) %&gt;%
   str_remove(&quot;.static.pval.tsv&quot;)
-drChrs &lt;- seq(1:25)</code></pre>
-<pre class="r"><code>topASE &lt;- lapply(files, function(x){
+topASE &lt;- lapply(files, function(x){
   sample &lt;- basename(x) %&gt;%
     str_remove(&quot;.static.pval.tsv&quot;)
   read_tsv(x) %&gt;%
@@ -1146,395 +1159,59 @@ drChrs &lt;- seq(1:25)</code></pre>
 }) %&gt;%
   set_names(metadata$alias[match(samples, metadata$sample)]) %&gt;%
   .[metadata$alias]</code></pre>
-<pre class="r"><code>nASE &lt;- sapply(topASE, function(x){
-  dplyr::filter(x, ASE) %&gt;%
-    nrow()
-})</code></pre>
-</div>
-</div>
-<div id="enrichment-testing" class="section level1">
-<h1>Enrichment testing</h1>
-<div id="fishers-exact-test" class="section level2">
-<h2>Fisher’s exact test</h2>
-<pre class="r"><code>chrGenes &lt;- genes %&gt;%
-  as_tibble() %&gt;%
-  dplyr::filter(seqnames %in% drChrs) %&gt;%
-  droplevels() %&gt;%
-  split(.$seqnames) %&gt;%
-  lapply(pull, gene_id) %&gt;%
-  set_names(paste0(&quot;chr&quot;, names(.)))</code></pre>
-<pre class="r"><code>chrGenes_df &lt;- chrGenes %&gt;%
-  lapply(list) %&gt;%
-  as_tibble() %&gt;%
-  pivot_longer(cols = everything(), names_to = &quot;chr&quot;, values_to= &quot;feat&quot;) %&gt;%
-  unnest(feat)</code></pre>
-<pre class="r"><code>aseByGene &lt;- lapply(topASE, dplyr::filter, ASE) %&gt;%
-  bind_rows() %&gt;%
-  mutate(genoAlias = case_when(
-    str_detect(alias, &quot;fAD&quot;) ~ &quot;fAD&quot;,
-    str_detect(alias, &quot;fAI&quot;) ~ &quot;fAI&quot;,
-    str_detect(alias, &quot;wt&quot;) ~ &quot;WT&quot;,
-  )) %&gt;%
-  group_by(feat, genoAlias) %&gt;%
-  tally() %&gt;%
+<pre class="r"><code>aseRC &lt;- readRDS(here(&quot;files/aseRC.Rds&quot;))
+aseRCByGene &lt;- readRDS(here(&quot;files/aseRCByGene.Rds&quot;)) %&gt;%
+  sapply(dplyr::select, gene, everything(), simplify = FALSE)</code></pre>
+<pre class="r"><code>nASE &lt;- bind_rows(topASE) %&gt;%
+  group_by(alias, sample, genotype) %&gt;%
+  summarise(nASE = sum(ASE), total = n()) %&gt;%
   ungroup() %&gt;%
-  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %&gt;%
-  left_join(chrGenes_df)</code></pre>
-<pre class="r"><code>aseByChr &lt;- sapply(c(&quot;fAD&quot;, &quot;fAI&quot;, &quot;WT&quot;), function(geno){
-  aseByGene %&gt;%
-    dplyr::filter(!!sym(geno) != 0) %&gt;%
-    group_by(chr) %&gt;%
-    tally()
-}, simplify = FALSE)</code></pre>
-<pre class="r"><code>noAseByGene &lt;- lapply(topASE, dplyr::filter, !ASE) %&gt;%
-  bind_rows() %&gt;%
-  mutate(genoAlias = case_when(
-    str_detect(alias, &quot;fAD&quot;) ~ &quot;fAD&quot;,
-    str_detect(alias, &quot;fAI&quot;) ~ &quot;fAI&quot;,
-    str_detect(alias, &quot;wt&quot;) ~ &quot;WT&quot;,
-  )) %&gt;%
-  group_by(feat, genoAlias) %&gt;%
-  tally() %&gt;%
-  ungroup() %&gt;%
-  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %&gt;%
-  left_join(chrGenes_df)</code></pre>
-<pre class="r"><code>noAseByChr &lt;- sapply(c(&quot;fAD&quot;, &quot;fAI&quot;, &quot;WT&quot;), function(geno){
-  noAseByGene %&gt;%
-    dplyr::filter(!!sym(geno) != 0) %&gt;%
-    group_by(chr) %&gt;%
-    tally()
-}, simplify = FALSE)</code></pre>
-<pre class="r"><code>aseTabs &lt;- sapply(aseByChr, function(x){
-  sapply(x$chr, function(y){
-    mutate(x, isChr = chr == y) %&gt;%
-      group_by(isChr) %&gt;%
-      summarise(ase = sum(n))
-  }, simplify = FALSE)
-}, simplify = FALSE)
-
-noAseTabs &lt;- sapply(noAseByChr, function(x){
-  sapply(x$chr, function(y){
-    mutate(x, isChr = chr == y) %&gt;%
-      group_by(isChr) %&gt;%
-      summarise(noAse = sum(n))
-  }, simplify = FALSE)
-}, simplify = FALSE)</code></pre>
-<pre class="r"><code>fisherTestAse &lt;- function(.x, .y){
-  left_join(.x, .y) %&gt;%
-    column_to_rownames(&quot;isChr&quot;) %&gt;%
-    as.matrix() %&gt;%
-    fisher.test()
-}</code></pre>
-<pre class="r"><code>fisherAse &lt;- list(
-  fAD = map2(aseTabs$fAD, noAseTabs$fAD, fisherTestAse),
-  fAI = map2(aseTabs$fAI, noAseTabs$fAI, fisherTestAse),
-  WT = map2(aseTabs$WT, noAseTabs$WT, fisherTestAse)
-)</code></pre>
-<pre class="r"><code>lapply(seq_along(fisherAse), function(x){
-  vapply(fisherAse[[x]], function(y){
-    y$p.value
-  }, numeric(1)) %&gt;%
-    enframe(name = &quot;chr&quot;, value = &quot;pval&quot;) %&gt;%
-    mutate(
-      chr = factor(chr, levels = str_sort(chr, numeric = TRUE)),
-      genotype = factor(genotypes[x])
-    )
-}) %&gt;%
-  bind_rows() %&gt;%
-  ggplot(aes(chr, -log10(pval), fill = genotype)) +
-  geom_bar(stat = &quot;identity&quot;, position = &quot;dodge&quot;, colour= &quot;black&quot;, width = 0.7) +
-  geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;, ) +
+  mutate(
+    alias = factor(alias),
+    propASE = nASE / total
+  )</code></pre>
+<p>Between <em>327</em> and <em>557</em> genes were classified as showing ASE across all samples, which accounted for between <em>4.53%</em> and <em>7.14%</em> of the total genes tested.</p>
+<pre class="r"><code>nASE %&gt;%
+  ggplot(aes(alias, nASE, fill = genotype)) +
+  geom_bar(stat = &quot;identity&quot;, colour = &quot;black&quot;) +
   scale_fill_manual(values = genoCols) +
-  scale_x_discrete(labels = seq(1:25)) +
-  labs(y = log10plab, x = &quot;Chromosome&quot;, fill = &quot;Genotype&quot;) +
-  theme(legend.position = &quot;bottom&quot;)</code></pre>
-<p><img src="ase_analysis_files/figure-html/unnamed-chunk-19-1.png" width="768" style="display: block; margin: auto;" /></p>
+  scale_y_continuous(breaks = seq(0, 500, 100)) +
+  labs(
+    x = &quot;Sample&quot;,
+    y = &quot;Number of ASE genes&quot;,
+    fill = &quot;Genotype&quot;
+  )</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_analysis_files/figure-html/nAsePlot-1.png" alt="*The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*" width="768" />
+<p class="caption">
+<em>The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.</em>
+</p>
 </div>
-<div id="gene-set-enrichment-analysis" class="section level2">
-<h2>Gene Set Enrichment Analysis</h2>
-<div id="setup-1" class="section level3">
-<h3>Setup</h3>
-<pre class="r"><code>wilsonConf &lt;- function(p.vals, conf.level = 0.95){
-  p &lt;- mean(p.vals)
-  n &lt;- length(p.vals)
-  alpha &lt;- (1 - conf.level)
-  alpha2 &lt;- alpha / 2
-  z &lt;- qnorm(1 - alpha2)
-  z2 &lt;- z * z
-  p1 &lt;- p + 0.5 * z2/n
-  p2 &lt;- z * sqrt((p * (1 - p) + 0.25 * z2/n)/n)
-  p3 &lt;- 1 + z2/n
-  lcl &lt;- (p1 - p2)/p3
-  ucl &lt;- (p1 + p2)/p3
-  res.wilson &lt;- tibble(
-    mean.p = p,
-    lower = lcl,
-    upper = ucl,
-    n = n,
-    sig = mean.p &lt; alpha
-  )
-  return(res.wilson)
-}</code></pre>
-<pre class="r"><code>bonfConf &lt;- function(adj.p.val, n, n.bonf, conf.level = 0.95, tail = c(&quot;lower&quot;, &quot;upper&quot;)){
-  alpha &lt;- ((1 - conf.level) / n.bonf)
-  alpha2 &lt;- alpha / 2
-  z &lt;- qnorm(1 - alpha2)
-  z2 &lt;- z * z
-  p1 &lt;- adj.p.val + 0.5 * z2/n
-  p2 &lt;- z * sqrt((adj.p.val * (1 - adj.p.val) + 0.25 * z2/n)/n)
-  p3 &lt;- 1 + z2/n
-  lcl &lt;- (p1 - p2)/p3
-  ucl &lt;- (p1 + p2)/p3
-  if (tail == &quot;lower&quot;){return(lcl)}
-  if (tail == &quot;upper&quot;){return(ucl)}
-}</code></pre>
-<pre class="r"><code>intSizeByN &lt;- lapply(seq(1:1000), function(n){
-  p &lt;- 0.05
-  alpha &lt;- 1 - p
-  alpha2 &lt;- 0.5 * alpha
-  z &lt;- qnorm(1 - alpha2)
-  z2 &lt;- z * z
-  p1 &lt;- p + 0.5 * z2/n
-  p2 &lt;- z * sqrt((p * (1 - p) + 0.25 * z2/n)/n)
-  p3 &lt;- 1 + z2/n
-  lcl &lt;- (p1 - p2)/p3
-  ucl &lt;- (p1 + p2)/p3
-  res.wilson &lt;- tibble(
-    p = p,
-    n = n,
-    lower = lcl,
-    upper = ucl
-  )
-  return(res.wilson)
-})
-intSizeByN %&gt;%
-  bind_rows() %&gt;%
-  mutate(size = upper - lower) %&gt;%
-  ggplot(aes(n, size)) +
-  geom_line() +
-  labs(y = &quot;Wilson interval size&quot;) +
-  scale_y_continuous(breaks = seq(0, 0.03, by = 0.001)) +
-  scale_x_continuous(breaks = seq(0, 1000, by = 100))</code></pre>
-<p><img src="ase_analysis_files/figure-html/unnamed-chunk-22-1.png" width="768" style="display: block; margin: auto;" /></p>
-</div>
-<div id="non-directional" class="section level3">
-<h3>Non-directional</h3>
-<pre class="r"><code>permRanks_nd &lt;- function(topASE){
-  topASE[,c(&quot;feat&quot;, &quot;fdr&quot;)] %&gt;%
-    mutate(
-      fdr = ifelse(fdr == 0, 0.000001, fdr),
-      stat = -log10(fdr)
-    ) %&gt;%
-    split(f = .$stat) %&gt;%
-    lapply(function(x){
-      pull(x, feat) %&gt;%
-        sample(length(.), replace = FALSE)
-    }) %&gt;%
-    unlist(use.names = FALSE) %&gt;%
-    enframe(name = NULL, value = &quot;geneid&quot;) %&gt;%
-    mutate(stat = seq(1:nrow(.))) %&gt;%
-    with(structure(stat, names = geneid)) %&gt;%
-    rev()
-}</code></pre>
-<pre class="r"><code>perms &lt;- 500
-file_nd &lt;- paste0(
-  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv&quot;,
-  &quot;/files/fgsea_nd_&quot;,
-  perms,
-  &quot;perms.Rds&quot;
-)</code></pre>
-<pre class="r"><code>## This code chunk has a lengthy run-time and will not run if the object has already been saved
-## Due to its large size the object remains on the HPC system
-## Across 6 threads it takes 1-2 hours to complete
-if (!file.exists(file_nd)) {
-  plan(list(tweak(multisession, workers = cores), sequential))
-  ranks_nd &lt;- future_sapply(1:perms, function(...){
-    future_sapply(topASE, permRanks_nd, future.seed = 17)
-  }, future.seed = 17) %&gt;%
-    t() %&gt;%
-    as_tibble()
-  fgsea_nd &lt;- future_lapply(as.list(ranks_nd), function(x){
-    future_lapply(x, function(y){
-      fgseaMultilevel(chrGenes, y, scoreType = &quot;pos&quot;, eps = 0)
-    }, future.seed = 17)
-  }, future.seed = 17) %&gt;%
-    set_names(colnames(ranks_nd))
-  saveRDS(fgsea_nd, file_nd)
-  plan(sequential)
-}</code></pre>
-<pre class="r"><code>fgsea_nd &lt;- readRDS(file_nd)</code></pre>
-<pre class="r"><code>pvals_nd &lt;- lapply(fgsea_nd, function(x){
-  lapply(seq_along(x), function(y){
-    x[[y]][,c(&quot;pathway&quot;, &quot;padj&quot;)] %&gt;%
-      dplyr::rename(!!as.character(y) := padj)
-  }) %&gt;%
-    purrr::reduce(left_join) %&gt;%
-    column_to_rownames(&quot;pathway&quot;) %&gt;%
-    t() %&gt;%
-    as_tibble()
-})</code></pre>
-<pre class="r"><code>mean_nd &lt;- lapply(pvals_nd, function(sample){
-  chrList &lt;- as.list(sample)
-  lapply(seq_along(chrList), function(x){
-    chr &lt;- names(chrList)[x]
-    wilsonConf(chrList[[x]]) %&gt;%
-      mutate(chromosome = as.factor(chr))
-  }) %&gt;%
-    bind_rows() %&gt;%
-    dplyr::select(chromosome, everything()) %&gt;%
-    mutate(
-      adj.mean.p = p.adjust(mean.p, method = &quot;bonf&quot;),
-      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), tail = &quot;lower&quot;),
-      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), tail = &quot;upper&quot;)
-    )
-}) </code></pre>
-<pre class="r"><code>lapply(seq_along(mean_nd), function(ind){
-  x &lt;- mean_nd[[ind]]
-  x %&gt;%
-    mutate(
-      sample = names(mean_nd)[ind],
-      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
-    )
-}) %&gt;%
-  bind_rows() %&gt;%
-  left_join(metadata[,c(&quot;alias&quot;, &quot;genotype&quot;)], by = c(&quot;sample&quot; = &quot;alias&quot;)) %&gt;%
-  ggplot(aes(sample, -log10(adj.mean.p))) +
-  geom_bar(stat = &quot;identity&quot;, aes(fill = genotype)) +
-  geom_errorbar(aes(
-    ymax = -log10(adj.lower),
-    ymin = -log10(adj.upper)
-  ), width = 0.2) +
-  geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;) +
-  facet_wrap(~ chromosome) +
+<p>As the chromosomal localisation of ASE was of interest, the number of genes showing ASE was also assessed at each chromosome.</p>
+<pre class="r"><code>bind_rows(topASE) %&gt;%
+  left_join(chrGenes_df) %&gt;%
+  mutate(chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))) %&gt;%
+  group_by(genotype, chr) %&gt;%
+  summarise(nASE = sum(ASE)) %&gt;% 
+  ggplot(aes(genotype, nASE, fill = genotype)) +
+  geom_bar(stat = &quot;identity&quot;, colour = &quot;black&quot;) +
+  facet_wrap(~chr) +
+  scale_fill_manual(values = genoCols) +
+  labs(
+    x = &quot;Genotype&quot;,
+    y = &quot;Number of ASE genes&quot;,
+    fill = &quot;Genotype&quot;
+  ) +
   theme(
     axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
     axis.title.x = element_blank(),
-    legend.position = &quot;bottom&quot;
-  ) +
-  scale_fill_manual(values = genoCols) +
-  labs(y = log10plab)</code></pre>
-<p><img src="ase_analysis_files/figure-html/unnamed-chunk-29-1.png" width="768" style="display: block; margin: auto;" /></p>
-</div>
-<div id="directional" class="section level3">
-<h3>Directional</h3>
-<pre class="r"><code>permRanks_d &lt;- function(topASE){
-  geno &lt;- unique(topASE$alias)
-  if (str_detect(geno, &quot;fAD&quot;)) {
-    dat &lt;- topASE[,c(&quot;feat&quot;, &quot;fdr&quot;)] %&gt;%
-      left_join(
-        topDE$fAD[,c(&quot;gene_id&quot;, &quot;logFC&quot;)],
-        by = c(&quot;feat&quot; = &quot;gene_id&quot;)
-      )
-  }
-  if (str_detect(geno, &quot;fAI&quot;)) {
-    dat &lt;- topASE[,c(&quot;feat&quot;, &quot;fdr&quot;)] %&gt;%
-      left_join(
-        topDE$fAI[,c(&quot;gene_id&quot;, &quot;logFC&quot;)],
-        by = c(&quot;feat&quot; = &quot;gene_id&quot;)
-      )
-  }
-  dat %&gt;%
-    mutate(
-      fdr = ifelse(fdr == 0, 0.000001, fdr),
-      stat = sign(logFC) * -log10(fdr)
-    ) %&gt;%
-    dplyr::arrange(stat) %&gt;%
-    split(f = .$stat) %&gt;%
-    lapply(function(x){
-      pull(x, feat) %&gt;%
-        sample(length(.), replace = FALSE)
-    }) %&gt;%
-    unlist(use.names = FALSE) %&gt;%
-    enframe(name = NULL, value = &quot;geneid&quot;) %&gt;%
-    mutate(stat = seq(1:nrow(.))) %&gt;%
-    with(structure(stat, names = geneid)) %&gt;%
-    rev()
-}</code></pre>
-<pre class="r"><code>perms &lt;- 500
-file_d &lt;- paste0(
-  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv&quot;,
-  &quot;/files/fgsea_d_&quot;,
-  perms,
-  &quot;perms.Rds&quot;
-)</code></pre>
-<pre class="r"><code>## This code chunk has a lengthy run-time and will not run if the object has already been saved
-## Due to its large size the object remains on the HPC system
-## Across 6 threads it takes 1-2 hours to complete
-if (!file.exists(file_d)) {
-  plan(list(tweak(multisession, workers = 6), sequential))
-  ranks_d &lt;- future_sapply(1:perms, function(...){
-    future_sapply(
-      topASE[str_detect(names(topASE), &quot;(fAD|fAI)&quot;)],
-      permRanks_d,
-      future.seed = 17
-    )
-  }, future.seed = 17) %&gt;%
-    t() %&gt;%
-    as_tibble()
-  fgsea_d &lt;- future_lapply(as.list(ranks_d), function(x){
-    future_lapply(x, function(y){
-      fgseaMultilevel(chrGenes, y, scoreType = &quot;pos&quot;, eps = 0)
-    }, future.seed = 17)
-  }, future.seed = 17) %&gt;%
-    set_names(colnames(ranks_d))
-  saveRDS(fgsea_d, file_d)
-  plan(sequential)
-}</code></pre>
-<pre class="r"><code>fgsea_d &lt;- readRDS(file_d)</code></pre>
-<pre class="r"><code>pvals_d &lt;- lapply(fgsea_d, function(x){
-  lapply(seq_along(x), function(y){
-    x[[y]][,c(&quot;pathway&quot;, &quot;padj&quot;)] %&gt;%
-      dplyr::rename(!!as.character(y) := padj)
-  }) %&gt;%
-    purrr::reduce(left_join) %&gt;%
-    column_to_rownames(&quot;pathway&quot;) %&gt;%
-    t() %&gt;%
-    as_tibble()
-})</code></pre>
-<pre class="r"><code>mean_d &lt;- lapply(pvals_d, function(sample){
-  chrList &lt;- as.list(sample)
-  lapply(seq_along(chrList), function(x){
-    chr &lt;- names(chrList)[x]
-    wilsonConf(chrList[[x]]) %&gt;%
-      mutate(chromosome = as.factor(chr))
-  }) %&gt;%
-    bind_rows() %&gt;%
-    dplyr::select(chromosome, everything()) %&gt;%
-    mutate(
-      adj.mean.p = p.adjust(mean.p, method = &quot;bonf&quot;),
-      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), tail = &quot;lower&quot;),
-      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), tail = &quot;upper&quot;)
-    )
-}) </code></pre>
-<pre class="r"><code>lapply(seq_along(mean_d), function(ind){
-  x &lt;- mean_d[[ind]]
-  x %&gt;%
-    mutate(
-      sample = names(mean_d)[ind],
-      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
-    )
-}) %&gt;%
-  bind_rows() %&gt;%
-  left_join(metadata[,c(&quot;alias&quot;, &quot;genotype&quot;)], by = c(&quot;sample&quot; = &quot;alias&quot;)) %&gt;%
-  ggplot(aes(sample, -log10(adj.mean.p))) +
-  geom_bar(stat = &quot;identity&quot;, aes(fill = genotype)) +
-  geom_errorbar(aes(
-    ymax = -log10(adj.lower),
-    ymin = -log10(adj.upper)
-  ), width = 0.2) +
-  geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;) +
-  facet_wrap(~ chromosome) +
-  theme(
-    axis.text.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    axis.title.x = element_blank(),
-    legend.position = &quot;bottom&quot;
-  ) +
-  scale_fill_manual(values = compCols) +
-  labs(y = log10plab)</code></pre>
-<p><img src="ase_analysis_files/figure-html/unnamed-chunk-36-1.png" width="768" style="display: block; margin: auto;" /></p>
-</div>
+    axis.ticks.x = element_blank()
+  )</code></pre>
+<div class="figure" style="text-align: center">
+<img src="ase_analysis_files/figure-html/nAseByChrPlot-1.png" alt="*The number of genes showing ASE at each chromosome. Samples are grouped by genotype.*" width="768" />
+<p class="caption">
+<em>The number of genes showing ASE at each chromosome. Samples are grouped by genotype.</em>
+</p>
 </div>
 </div>
 
@@ -1592,7 +1269,7 @@ $(document).ready(function ()  {
 
     // establish options
     var options = {
-      selectors: "h1,h2,h3",
+      selectors: "h1,h2,h3,h4",
       theme: "bootstrap3",
       context: '.toc-content',
       hashGenerator: function (text) {

@@ -471,7 +471,7 @@ intSizeByN %>%
 ### Non-directional
 
 ```{r}
-permRanks <- function(topASE){
+permRanks_nd <- function(topASE){
   topASE[,c("feat", "fdr")] %>%
     mutate(
       fdr = ifelse(fdr == 0, 0.000001, fdr),
@@ -492,9 +492,9 @@ permRanks <- function(topASE){
 
 ```{r}
 perms <- 500
-fgseaFile <- paste0(
+file_nd <- paste0(
   here(),
-  "/files/fgsea_",
+  "/files/fgsea_nd_",
   perms,
   "perms.Rds"
 )
@@ -504,30 +504,30 @@ fgseaFile <- paste0(
 ## This code chunk has a lengthy run-time and will not run if the object has already been saved
 ## Due to its large size the object remains on the HPC system
 ## Across 6 threads it takes 1-2 hours to complete
-if (!file.exists(fgseaFile)) {
+if (!file.exists(file_nd)) {
   plan(list(tweak(multisession, workers = cores), sequential))
-  ranks <- future_sapply(1:perms, function(...){
-    future_sapply(topASE, permRanks, future.seed = 17)
+  ranks_nd <- future_sapply(1:perms, function(...){
+    future_sapply(topASE, permRanks_nd, future.seed = 17)
   }, future.seed = 17) %>%
     t() %>%
     as_tibble()
-  fgsea <- future_lapply(as.list(ranks), function(x){
+  fgsea_nd <- future_lapply(as.list(ranks_nd), function(x){
     future_lapply(x, function(y){
       fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
     }, future.seed = 17)
   }, future.seed = 17) %>%
-    set_names(colnames(ranks))
-  saveRDS(fgsea, fgseaFile)
+    set_names(colnames(ranks_nd))
+  saveRDS(fgsea_nd, file_nd)
   plan(sequential)
 }
 ```
 
 ```{r}
-fgsea <- readRDS(fgseaFile)
+fgsea_nd <- readRDS(file_nd)
 ```
 
 ```{r}
-pvals <- lapply(fgsea, function(x){
+pvals_nd <- lapply(fgsea_nd, function(x){
   lapply(seq_along(x), function(y){
     x[[y]][,c("pathway", "padj")] %>%
       dplyr::rename(!!as.character(y) := padj)
@@ -540,7 +540,7 @@ pvals <- lapply(fgsea, function(x){
 ```
 
 ```{r}
-mean <- lapply(pvals, function(sample){
+mean_nd <- lapply(pvals_nd, function(sample){
   chrList <- as.list(sample)
   lapply(seq_along(chrList), function(x){
     chr <- names(chrList)[x]
@@ -558,11 +558,11 @@ mean <- lapply(pvals, function(sample){
 ```
 
 ```{r, fig.height=7.5}
-lapply(seq_along(mean), function(ind){
-  x <- mean[[ind]]
+lapply(seq_along(mean_nd), function(ind){
+  x <- mean_nd[[ind]]
   x %>%
     mutate(
-      sample = names(mean)[ind],
+      sample = names(mean_nd)[ind],
       chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
     )
 }) %>%
@@ -583,5 +583,143 @@ lapply(seq_along(mean), function(ind){
     legend.position = "bottom"
   ) +
   scale_fill_manual(values = genoCols) +
+  labs(y = log10plab)
+```
+
+### Directional
+
+```{r}
+permRanks_d <- function(topASE){
+  geno <- unique(topASE$alias)
+  if (str_detect(geno, "fAD")) {
+    dat <- topASE[,c("feat", "fdr")] %>%
+      left_join(
+        topDE$fAD[,c("gene_id", "logFC")],
+        by = c("feat" = "gene_id")
+      )
+  }
+  if (str_detect(geno, "fAI")) {
+    dat <- topASE[,c("feat", "fdr")] %>%
+      left_join(
+        topDE$fAI[,c("gene_id", "logFC")],
+        by = c("feat" = "gene_id")
+      )
+  }
+  dat %>%
+    mutate(
+      fdr = ifelse(fdr == 0, 0.000001, fdr),
+      stat = sign(logFC) * -log10(fdr)
+    ) %>%
+    dplyr::arrange(stat) %>%
+    split(f = .$stat) %>%
+    lapply(function(x){
+      pull(x, feat) %>%
+        sample(length(.), replace = FALSE)
+    }) %>%
+    unlist(use.names = FALSE) %>%
+    enframe(name = NULL, value = "geneid") %>%
+    mutate(stat = seq(1:nrow(.))) %>%
+    with(structure(stat, names = geneid)) %>%
+    rev()
+}
+```
+
+```{r}
+perms <- 500
+file_d <- paste0(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv",
+  "/files/fgsea_d_",
+  perms,
+  "perms.Rds"
+)
+```
+
+```{r}
+## This code chunk has a lengthy run-time and will not run if the object has already been saved
+## Due to its large size the object remains on the HPC system
+## Across 6 threads it takes 1-2 hours to complete
+if (!file.exists(file_d)) {
+  plan(list(tweak(multisession, workers = 6), sequential))
+  ranks_d <- future_sapply(1:perms, function(...){
+    future_sapply(
+      topASE[str_detect(names(topASE), "(fAD|fAI)")],
+      permRanks_d,
+      future.seed = 17
+    )
+  }, future.seed = 17) %>%
+    t() %>%
+    as_tibble()
+  fgsea_d <- future_lapply(as.list(ranks_d), function(x){
+    future_lapply(x, function(y){
+      fgseaMultilevel(chrGenes, y, scoreType = "pos", eps = 0)
+    }, future.seed = 17)
+  }, future.seed = 17) %>%
+    set_names(colnames(ranks_d))
+  saveRDS(fgsea_d, file_d)
+  plan(sequential)
+}
+```
+
+```{r}
+fgsea_d <- readRDS(file_d)
+```
+
+```{r}
+pvals_d <- lapply(fgsea_d, function(x){
+  lapply(seq_along(x), function(y){
+    x[[y]][,c("pathway", "padj")] %>%
+      dplyr::rename(!!as.character(y) := padj)
+  }) %>%
+    purrr::reduce(left_join) %>%
+    column_to_rownames("pathway") %>%
+    t() %>%
+    as_tibble()
+})
+```
+
+```{r}
+mean_d <- lapply(pvals_d, function(sample){
+  chrList <- as.list(sample)
+  lapply(seq_along(chrList), function(x){
+    chr <- names(chrList)[x]
+    wilsonConf(chrList[[x]]) %>%
+      mutate(chromosome = as.factor(chr))
+  }) %>%
+    bind_rows() %>%
+    dplyr::select(chromosome, everything()) %>%
+    mutate(
+      adj.mean.p = p.adjust(mean.p, method = "bonf"),
+      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "lower"),
+      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = "upper")
+    )
+}) 
+```
+
+```{r, fig.height=7.5}
+lapply(seq_along(mean_d), function(ind){
+  x <- mean_d[[ind]]
+  x %>%
+    mutate(
+      sample = names(mean_d)[ind],
+      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
+    )
+}) %>%
+  bind_rows() %>%
+  left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
+  ggplot(aes(sample, -log10(adj.mean.p))) +
+  geom_bar(stat = "identity", aes(fill = genotype)) +
+  geom_errorbar(aes(
+    ymax = -log10(adj.lower),
+    ymin = -log10(adj.upper)
+  ), width = 0.2) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  facet_wrap(~ chromosome) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank(),
+    legend.position = "bottom"
+  ) +
+  scale_fill_manual(values = compCols) +
   labs(y = log10plab)
 ```
