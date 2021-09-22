@@ -466,7 +466,7 @@ pca_cqn$x %>%
   geom_point(size = 2) +
   geom_text_repel(show.legend = FALSE) +
   stat_ellipse(geom = "polygon", alpha = 0.05, show.legend = FALSE) +
-  guides(fill = FALSE) +
+  guides(fill = "none") +
   scale_colour_manual(values = genoCols) +
   labs(
     x = paste0("PC1 (", pcaVars[["PC1"]], ")"),
@@ -690,7 +690,7 @@ deCpmPlots <- lapply(seq_along(deGenes), function(x){
       facet_wrap(
         ~gene_id,
         labeller = geneLabeller,
-        nrow = 4
+        nrow = 2
       ) +
       theme(
         legend.position = "none",
@@ -792,7 +792,7 @@ cpm[deGenes$`fAI-like/+`,] %>%
   )
 ```
 
-```{r, fig.height=8, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
+```{r, fig.height=4, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
 deCpmPlots[[2]]
 ```
 
