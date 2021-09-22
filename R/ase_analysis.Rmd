@@ -292,106 +292,30 @@ sapply(deGenes, function(x){
 ## Fisher's exact test
 
 ```{r}
-## Number of samples per genotype showing ASE for a given gene
-aseByGene <- bind_rows(topASE) %>%
-  dplyr::filter(ASE) %>%
-  mutate(genoAlias = case_when(
-    str_detect(alias, "fAD") ~ "fAD",
-    str_detect(alias, "fAI") ~ "fAI",
-    str_detect(alias, "wt") ~ "WT",
-  )) %>%
-  group_by(feat, genoAlias) %>%
-  tally() %>%
+fisherRes <- bind_rows(topASE) %>%
+  left_join(chrGenes_df) %>%
+  group_by(sample, chr) %>%
+  summarise(ase_chr = sum(ASE), noAse_chr = sum(!ASE)) %>%
+  group_by(sample) %>%
+  mutate(
+    ase_notChr = sum(ase_chr) - ase_chr,
+    noAse_notChr = sum(noAse_chr) - noAse_chr
+  ) %>%
   ungroup() %>%
-  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
-  left_join(chrGenes_df)
-## Number of genes with at least 1 sample showing ASE per genotype for each chromosome
-aseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
-  aseByGene %>%
-    dplyr::filter(!!sym(geno) != 0) %>%
-    group_by(chr) %>%
-    tally()
-}, simplify = FALSE)
-```
-
-```{r}
-## Number of samples per genotype not showing ASE for a given gene
-noAseByGene <- bind_rows(topASE) %>%
-  dplyr::filter(!ASE) %>%
-  mutate(genoAlias = case_when(
-    str_detect(alias, "fAD") ~ "fAD",
-    str_detect(alias, "fAI") ~ "fAI",
-    str_detect(alias, "wt") ~ "WT",
-  )) %>%
-  group_by(feat, genoAlias) %>%
-  tally() %>%
-  ungroup() %>%
-  pivot_wider(names_from = genoAlias, values_from = n, values_fill = 0) %>%
-  left_join(chrGenes_df)
-## Number of genes with no samples showing ASE per genotype for each chromosome
-noAseByChr <- sapply(c("fAD", "fAI", "WT"), function(geno){
-  noAseByGene %>%
-    dplyr::filter(!!sym(geno) != 0) %>%
-    group_by(chr) %>%
-    tally()
-}, simplify = FALSE)
-```
-
-```{r}
-aseTabs <- sapply(aseByChr, function(x){
-  sapply(x$chr, function(y){
-    mutate(x, isChr = chr == y) %>%
-      group_by(isChr) %>%
-      summarise(ase = sum(n))
-  }, simplify = FALSE)
-}, simplify = FALSE)
-
-noAseTabs <- sapply(noAseByChr, function(x){
-  sapply(x$chr, function(y){
-    mutate(x, isChr = chr == y) %>%
-      group_by(isChr) %>%
-      summarise(noAse = sum(n))
-  }, simplify = FALSE)
-}, simplify = FALSE)
-```
-
-```{r}
-fisherTestAse <- function(.x, .y){
-  left_join(.x, .y) %>%
-    column_to_rownames("isChr") %>%
-    as.matrix() %>%
-    fisher.test()
-}
-```
-
-```{r}
-fisherAse <- list(
-  fAD = map2(aseTabs$fAD, noAseTabs$fAD, fisherTestAse),
-  fAI = map2(aseTabs$fAI, noAseTabs$fAI, fisherTestAse),
-  WT = map2(aseTabs$WT, noAseTabs$WT, fisherTestAse)
-)
-```
-
-```{r, fig.height=4}
-lapply(seq_along(fisherAse), function(x){
-  vapply(fisherAse[[x]], function(y){
-    y$p.value
-  }, numeric(1)) %>%
-    enframe(name = "chr", value = "pval") %>%
-    mutate(
-      chr = factor(chr, levels = str_sort(chr, numeric = TRUE)),
-      genotype = factor(genotypes[x]),
-      p.adj = p.adjust(pval, method = "bonf")
-    )
-}) %>%
-  bind_rows() %>%
-  ggplot(aes(chr, -log10(p.adj), fill = genotype)) +
-  geom_bar(stat = "identity", position = "dodge", colour= "black", width = 0.7) +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", ) +
-  scale_fill_manual(values = genoCols) +
-  scale_x_discrete(labels = seq(1:25)) +
-  labs(y = log10plab, x = "Chromosome", fill = "Genotype") +
-  theme(legend.position = "bottom")
+  mutate(
+    fisherTest = pmap(
+      ## Setup list input to pmap in order that will construct a correct matrix
+      list(ase_chr, ase_notChr, noAse_chr, noAse_notChr),
+      ~ fisher.test(matrix(c(..1, ..2, ..3, ..4), ncol = 2))
+    ),
+    fisher.p = vapply(
+      fisherTest,
+      function(x){x$p.value},
+      numeric(1)
+    ),
+    fdr.p = p.adjust(fisher.p, method = "fdr"),
+    bonf.p = p.adjust(fisher.p, method = "bonf")
+  )
 ```
 
 ## Gene Set Enrichment Analysis
