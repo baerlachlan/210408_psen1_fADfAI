@@ -16,7 +16,7 @@ editor_options:
   chunk_output_type: console
 ---
 
-```{r setup, include = FALSE}
+```{r knitr, include = FALSE}
 knitr::opts_chunk$set(
   echo = TRUE,
   message = FALSE,
@@ -26,6 +26,21 @@ knitr::opts_chunk$set(
 )
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 ```
+
+# Introduction
+
+The motivation for performing an allele specific expression (ASE) analysis stems from the idea that selecting for a particular chromosome (i.e. the mutant chromosome) within an experimental group also selects for any expression quantitative trait loci (eQTLs) that exist on that chromosome.
+Therefore exists the possibility of differences in transcript abundances between groups tested for differential expression due to different sets of allelic expression characteristics and separate from the effect of the mutation.
+This would not be a problem in isogenic organisms such as mice, but zebrafish are anything but isogenic.
+If the eQTL idea is true, one would expect to see a number of differentially expressed genes on the same chromosome of the mutation, which is indeed the case in this dataset.
+However, if not true, and the observations are caused by the effect of the mutation, an explanation must describe the functional relationship between genes on the same chromosome as the mutation.
+One such possibility is that functionally related genes tend to cluster on chromosomes through evolutionary time because it allows for advantageous allelic combinations to remain together due to the suppressed chance for separation through recombination or chromosomal segregation.
+
+The aim of this analysis is to therefore tease apart these two possibilities to the best ability with the available RNA-seq data.
+In particular, allele specific expression testing will be used to assess:
+
+1. The potential for ASE to impact differential expression testing in an undesired manner.
+2. Whether an overall enrichment of ASE is observed on the chromosome harbouring the mutation(s).
 
 # Setup 
 
@@ -52,23 +67,19 @@ suppressPackageStartupMessages({
 })
 ```
 
-```{r options}
+```{r setup}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
 cores <- availableCores() - 2
-```
-
-```{r lbFuncs}
 source("~/bioinformatics/bioToolkit/lbFuncs.R")
-```
-
-```{r projDir}
 ## Select base directory for the project
 projDir <- here()
 # projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv"
 ```
 
 ## EnsDb
+
+An `EnsDb` object was obtained for Ensembl release 101 from which gene and exon information was extracted for annotation required in the analysis.
 
 ```{r ensDb}
 ah <- AnnotationHub() %>%
@@ -83,7 +94,9 @@ exons <- exonsBy(ensDb, by = "gene")
 drChrs <- seq(1:25)
 ```
 
-```{r}
+As the chromosomal localisation of genes is of interest, list and dataframe objects containing gene and chromosome information were generated.
+
+```{r c}
 chrGenes <- genes %>%
   as_tibble() %>%
   dplyr::filter(seqnames %in% drChrs) %>%
@@ -156,7 +169,7 @@ wt <- metadata$alias %>%
 
 # Allele specific expression
 
-Allele specific expression testing was performed at the gene-level with `GeneiASE` software.
+Allele specific expression testing was performed for each sample at the gene-level with `GeneiASE` software.
 Genes were classified as showing allele specific expression (ASE) if they had a FDR-adjusted p-value < 0.05.
 
 ```{r aseData}
@@ -201,7 +214,7 @@ nASE <- bind_rows(topASE) %>%
 
 Between `r pander(range(nASE$nASE))` genes were classified as showing ASE across all samples, which accounted for between `r pander(range(percent_format(0.01)(nASE$propASE)))` of the total genes tested.
 
-```{r nAsePlot, fig.cap="*The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*"}
+```{r nAsePlot, fig.height=4, fig.cap="*The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*"}
 nASE %>%
   ggplot(aes(alias, nASE, fill = genotype)) +
   geom_bar(stat = "identity", colour = "black") +
@@ -211,87 +224,147 @@ nASE %>%
     x = "Sample",
     y = "Number of ASE genes",
     fill = "Genotype"
-  )
-```
-
-As the chromosomal localisation of ASE was of interest, the number of genes showing ASE was also assessed at each chromosome.
-
-```{r nAseByChrPlot, fig.height=10, fig.cap="*The number of genes showing ASE at each chromosome. Samples are grouped by genotype.*"}
-bind_rows(topASE) %>%
-  left_join(chrGenes_df) %>%
-  mutate(chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))) %>%
-  group_by(genotype, chr) %>%
-  summarise(nASE = sum(ASE)) %>% 
-  ggplot(aes(genotype, nASE, fill = genotype)) +
-  geom_bar(stat = "identity", colour = "black") +
-  facet_wrap(~chr) +
-  scale_fill_manual(values = genoCols) +
-  labs(
-    x = "Genotype",
-    y = "Number of ASE genes",
-    fill = "Genotype"
   ) +
   theme(
-    axis.text.x = element_blank(),
-    axis.title.x = element_blank(),
-    axis.ticks.x = element_blank(),
-    legend.position = "bottom"
+    axis.text.x = element_text(angle = 270, vjust = 0.5, hjust = 0)
   )
 ```
 
 # ASE overlap with DE genes
+
+Previously analysed different expression testing results were loaded as a list of topTables.
 
 ```{r deData}
 topDE <- readRDS(file.path(projDir, "files/topTables.Rds")) %>%
   set_names(c("fAD", "fAI"))
 ```
 
-In order to make any predictions regarding the possibility for ASE to affect DE results, the DE genes were assessed to determine which category they fell into:
+The `r names(topDE[1])` vs WT comparison showed `r nrow(dplyr::filter(topDE[[1]], DE))` DE genes.
 
-1. Included in testing for ASE
-2. Filtered by QC measures
-3. Not detected (no variants)
+```{r topDEfAD}
+topDE[[1]] %>%
+  dplyr::filter(DE) %>%
+  dplyr::select(geneID = gene_id, symbol = gene_name, chromosome, logFC, logCPM, FDR, bonfP) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "differentially expressed genes for Alzheimer's genotype",
+      "in comparison to wildtype"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
 
-As ASE testing was performed using a static (within sample) approach, the overlaps were also assessed on a per sample basis.
+The `r names(topDE[2])` vs WT comparison showed `r nrow(dplyr::filter(topDE[[2]], DE))` DE genes.
+
+```{r topDEfAI}
+topDE[[2]] %>%
+  dplyr::filter(DE) %>%
+  dplyr::select(geneID = gene_id, symbol = gene_name, chromosome, logFC, logCPM, FDR, bonfP) %>%
+  mutate(
+    logCPM = formatC(logCPM, digits = 2, format = "f"),
+    logFC = formatC(logFC, digits = 2, format = "f"),
+    FDR = formatC(FDR, digits = 2, format = "e"),
+    bonfP = formatC(bonfP, digits = 2, format = "e"),
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "differentially expressed genes for Acne Inversa genotype",
+      "in comparison to wildtype"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+For each differentially expressed gene, ASE results were assessed across each sample.
+Due to the requirements for each gene to possess at least one heterozygous single nucleotide variant (SNV) in order to be tested for ASE, not all detected genes were subject to the analysis.
+Furthermore, a substantial number of genes containing het-SNVs were excluded from ASE testing as they did not pass quality control requirements.
+Therefore it is important to distinguish whether a gene was tested and did not show ASE opposed to not being tested at all.
+For each DE gene, samples were assigned to one of three categories: 
+
+1. Tested and shows ASE
+2. Tested and does not show ASE
+3. Not tested (no detected het-SNVs or filtered by QC)
 
 ```{r deGenes}
 deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
 ```
 
-```{r}
-sapply(deGenes, function(x){
-  lapply(aseRCByGene, function(y){
-    dplyr::filter(y, gene %in% x$gene_id)
+```{r deAseOverlap}
+deAseOverlap <- sapply(deGenes, function(x){
+  lapply(topASE, function(y){
+    dplyr::select(x, feat = gene_id, symbol = gene_name, chromosome) %>%
+      left_join(y[,c("feat", "sample", "genotype", "ASE")])
   }) %>%
     bind_rows() %>%
-    group_by(gene, sample) %>%
-    summarise(
-      detected = n() > 0,
-      # undetected = 24 - detected,
-      snvs = n()
-    )
+    group_by(feat, ASE) %>%
+    tally() %>%
+    ungroup() %>%
+    pivot_wider(names_from = ASE, values_from = n, values_fill = 0) %>%
+    dplyr::select(gene = feat, ASE = `TRUE`, no_ASE = `FALSE`, not_tested = `NA`)
 }, simplify = FALSE)
 ```
 
-```{r}
-sapply(deGenes, function(x){
-  lapply(topASE, function(y){
-    dplyr::filter(y, feat %in% x$gene_id)
-  }) %>%
-    bind_rows() %>%
-    group_by(feat, genotype) %>%
-    summarise(
-      tested = length(sample),
-      ASE = sum(ASE)
+**Alzheimer's DE genes:**
+
+```{r overlapfAD}
+deAseOverlap$fAD %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The number of samples that were tested and showed ASE, tested and did",
+      "not show ASE, or not tested at all for each differentially expressed",
+      "gene in the Alzheimer's vs wildtype comparison"
     )
-}, simplify = FALSE)
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
 ```
+
+**Acne Inversa DE genes:**
+
+```{r overlapfAI}
+deAseOverlap$fAI %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The number of samples that were tested and showed ASE, tested and did",
+      "not show ASE, or not tested at all for each differentially expressed",
+      "gene in the Acne Inversa vs wildtype comparison"
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+Unfortunately due to the large amounts of samples that could not be examined for overlap of DE and ASE data, no conclusions could be made regarding the ability for ASE to affect DE results.
 
 # Enrichment testing
 
+While no conclusions were achieved to address the potential for ASE to impact differential expression testing in an undesired manner, more general patterns of ASE were assessed through enrichment testing.
+Two different methods were set up to analyse if ASE is enriched on the chromosome that was selected for:
+
+- Fisher's exact test
+- Gene set enrichment analysis (GSEA)
+
 ## Fisher's exact test
 
-```{r}
+For each chromosome within each sample, the entire set of detected genes tested for ASE were classified by belonging to the chromosome and showing ASE.
+
+```{r fisherTest}
 fisherRes <- bind_rows(topASE) %>%
   left_join(chrGenes_df) %>%
   group_by(sample, chr) %>%
@@ -315,12 +388,59 @@ fisherRes <- bind_rows(topASE) %>%
     ),
     fdr.p = p.adjust(fisher.p, method = "fdr"),
     bonf.p = p.adjust(fisher.p, method = "bonf")
-  )
+  ) %>%
+  left_join(metadata[,c("sample", "genotype")])
+```
+
+This was represented as a 2x2 contingency table for enrichment testing using Fisher's exact test.
+An example of a contingency table for chromosome 17 of sample 7_KB_B12 (EOfAD-like/+ genotype) is shown below:
+
+<center>
+```{r contTable}
+dplyr::filter(fisherRes, sample == "7_KB_B12" & chr == "chr17") %>%
+  with(
+    matrix(c(ase_chr, ase_notChr, noAse_chr, noAse_notChr), ncol = 2)
+  ) %>%
+  set_rownames(c("Chr 17", "Not Chr 17")) %>%
+  set_colnames(c("ASE", "No ASE")) %>%
+  pander()
+```
+</center>
+
+```{r fisherTestPlot, fig.height=7.5, fig.cap="*Results from Fisher's exact test for enrichment of ASE genes by chromosome. The -log10 FDR-adjusted p-value is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a FDR-adjust p-value of 0.05.*"}
+fisherRes %>%
+  mutate(
+    sample = factor(sample, levels = metadata$sample),
+    chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))
+  ) %>%
+  ggplot(aes(sample, -log10(fdr.p), fill = genotype)) +
+  geom_bar(stat = "identity", position = "dodge", colour= "black", width = 0.7) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed", ) +
+  scale_fill_manual(values = genoCols) +
+  labs(
+    title = "Chromosomal enrichment of genes showing ASE",
+    x = "Sample",
+    y = log10plab,
+    fill = "Genotype") +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.position = "bottom"
+    ) +
+  facet_wrap(~chr)
 ```
 
 ## Gene Set Enrichment Analysis
 
-### Setup
+As an alternative approach, GSEA was performed using gene sets defined based on the chromosome each gene is located.
+
+The first step for performing GSEA involved creating a ranked list .
+The methodology that `GeneiASE` uses for calculating p-values posed two issues when constructing a ranked list:
+
+1. Some p-values were 0
+    - this causes issues when using -log10(p) as a stat for ranking the genes
+2. Sets of genes had equal p-values
+    - this causes problems the ordering of these genes is arbitrary
 
 ```{r}
 wilsonConf <- function(p.vals, conf.level = 0.95){
@@ -362,7 +482,7 @@ bonfConf <- function(adj.p.val, n, n.bonf, conf.level = 0.95, limit = c("lower",
 }
 ```
 
-```{r}
+```{r insize, include=FALSE, eval=FALSE}
 intSizeByN <- lapply(seq(1:1000), function(n){
   p <- 0.05
   alpha <- 1 - p
@@ -391,8 +511,6 @@ intSizeByN %>%
   scale_y_continuous(breaks = seq(0, 0.03, by = 0.001)) +
   scale_x_continuous(breaks = seq(0, 1000, by = 100))
 ```
-
-### Non-directional
 
 ```{r}
 permRanks <- function(topASE){
