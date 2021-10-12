@@ -369,7 +369,7 @@ div.tocify {
 
 <h1 class="title toc-ignore">Allele Specific Expression Analysis</h1>
 <h4 class="author">Lachlan Baer</h4>
-<h4 class="date">23 September, 2021</h4>
+<h4 class="date">12 October, 2021</h4>
 
 </div>
 
@@ -2013,6 +2013,7 @@ ENSDARG00000105453
     noAse_notChr = sum(noAse_chr) - noAse_chr
   ) %&gt;%
   ungroup() %&gt;%
+  left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)]) %&gt;%
   mutate(
     fisherTest = pmap(
       ## Setup list input to pmap in order that will construct a correct matrix
@@ -2025,9 +2026,11 @@ ENSDARG00000105453
       numeric(1)
     ),
     fdr.p = p.adjust(fisher.p, method = &quot;fdr&quot;),
-    bonf.p = p.adjust(fisher.p, method = &quot;bonf&quot;)
-  ) %&gt;%
-  left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)])</code></pre>
+    bonf.p = p.adjust(fisher.p, method = &quot;bonf&quot;),
+    sample = factor(sample, levels = metadata$sample),
+    chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE)),
+    sigLabel = ifelse(fdr.p &lt; 0.05, &quot;*&quot;, &quot;&quot;)
+  )</code></pre>
 <p>This was represented as a 2x2 contingency table for enrichment testing using Fisher’s exact test. An example of a contingency table for chromosome 17 of sample 7_KB_B12 (EOfAD-like/+ genotype) is shown below:</p>
 <center>
 <pre class="r"><code>dplyr::filter(fisherRes, sample == &quot;7_KB_B12&quot; &amp; chr == &quot;chr17&quot;) %&gt;%
@@ -2065,14 +2068,12 @@ ENSDARG00000105453
 </table>
 </center>
 <pre class="r"><code>fisherRes %&gt;%
-  mutate(
-    sample = factor(sample, levels = metadata$sample),
-    chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))
-  ) %&gt;%
-  ggplot(aes(sample, -log10(fdr.p), fill = genotype)) +
+  ggplot(aes(sample, -log10(fisher.p), fill = genotype)) +
   geom_bar(stat = &quot;identity&quot;, position = &quot;dodge&quot;, colour= &quot;black&quot;, width = 0.7) +
-  geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;, ) +
+  geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;) +
+  geom_text(aes(label = sigLabel)) +
   scale_fill_manual(values = genoCols) +
+  coord_cartesian(ylim = c(NA, max(-log10(fisherRes$fisher.p)) + 0.5)) +
   labs(
     title = &quot;Chromosomal enrichment of genes showing ASE&quot;,
     x = &quot;Sample&quot;,
@@ -2085,16 +2086,16 @@ ENSDARG00000105453
     ) +
   facet_wrap(~chr)</code></pre>
 <div class="figure" style="text-align: center">
-<img src="ase_analysis_files/figure-html/fisherTestPlot-1.png" alt="*Results from Fisher's exact test for enrichment of ASE genes by chromosome. The -log10 FDR-adjusted p-value is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a FDR-adjust p-value of 0.05.*" width="768" />
+<img src="ase_analysis_files/figure-html/fisherTestPlot-1.png" alt="*Results from Fisher's exact test for enrichment of ASE genes by chromosome. The -log10(p-value) is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a p-value of 0.05. Samples satisfying a FDR-adjusted p-value of 0.05 show an asterix above the bar.*" width="768" />
 <p class="caption">
-<em>Results from Fisher’s exact test for enrichment of ASE genes by chromosome. The -log10 FDR-adjusted p-value is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a FDR-adjust p-value of 0.05.</em>
+<em>Results from Fisher’s exact test for enrichment of ASE genes by chromosome. The -log10(p-value) is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a p-value of 0.05. Samples satisfying a FDR-adjusted p-value of 0.05 show an asterix above the bar.</em>
 </p>
 </div>
 </div>
 <div id="gene-set-enrichment-analysis" class="section level2">
 <h2>Gene Set Enrichment Analysis</h2>
 <p>As an alternative approach, GSEA was performed using gene sets defined based on the chromosome each gene is located.</p>
-<p>The first step for performing GSEA involved creating a ranked list . The methodology that <code>GeneiASE</code> uses for calculating p-values posed two issues when constructing a ranked list:</p>
+<p>The first step for performing GSEA involved creating a ranked list. The methodology that <code>GeneiASE</code> uses for calculating p-values posed two issues when constructing a ranked list:</p>
 <ol style="list-style-type: decimal">
 <li>Some p-values were 0
 <ul>
@@ -2208,22 +2209,25 @@ if (!file.exists(fgseaFile)) {
       adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = &quot;upper&quot;)
     )
 }) </code></pre>
-<pre class="r"><code>lapply(seq_along(mean), function(ind){
+<pre class="r"><code>meanRes &lt;- lapply(seq_along(mean), function(ind){
   x &lt;- mean[[ind]]
   x %&gt;%
     mutate(
       sample = names(mean)[ind],
-      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
+      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE)),
+      sigLabel = ifelse(adj.lower &lt; 0.05, &quot;*&quot;, &quot;&quot;)
     )
 }) %&gt;%
   bind_rows() %&gt;%
-  left_join(metadata[,c(&quot;alias&quot;, &quot;genotype&quot;)], by = c(&quot;sample&quot; = &quot;alias&quot;)) %&gt;%
-  ggplot(aes(sample, -log10(adj.mean.p))) +
-  geom_bar(stat = &quot;identity&quot;, aes(fill = genotype)) +
+  left_join(metadata[,c(&quot;alias&quot;, &quot;genotype&quot;)], by = c(&quot;sample&quot; = &quot;alias&quot;)) </code></pre>
+<pre class="r"><code>meanRes %&gt;%
+  ggplot(aes(sample, -log10(mean.p), fill = genotype)) +
+  geom_bar(stat = &quot;identity&quot;, position = &quot;dodge&quot;, colour = &quot;black&quot;, width = 0.7) +
   geom_errorbar(aes(
-    ymax = -log10(adj.lower),
-    ymin = -log10(adj.upper)
+    ymax = -log10(lower),
+    ymin = -log10(upper)
   ), width = 0.2) +
+  geom_text(aes(label = sigLabel), nudge_y = (-log10(meanRes$lower) - -log10(meanRes$mean.p)) + 0.1) +
   geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;) +
   facet_wrap(~ chromosome) +
   theme(
@@ -2234,7 +2238,7 @@ if (!file.exists(fgseaFile)) {
   ) +
   scale_fill_manual(values = genoCols) +
   labs(y = log10plab)</code></pre>
-<p><img src="ase_analysis_files/figure-html/unnamed-chunk-10-1.png" width="768" style="display: block; margin: auto;" /></p>
+<p><img src="ase_analysis_files/figure-html/unnamed-chunk-11-1.png" width="768" style="display: block; margin: auto;" /></p>
 </div>
 </div>
 

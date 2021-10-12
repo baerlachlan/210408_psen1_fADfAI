@@ -375,6 +375,7 @@ fisherRes <- bind_rows(topASE) %>%
     noAse_notChr = sum(noAse_chr) - noAse_chr
   ) %>%
   ungroup() %>%
+  left_join(metadata[,c("sample", "genotype")]) %>%
   mutate(
     fisherTest = pmap(
       ## Setup list input to pmap in order that will construct a correct matrix
@@ -387,9 +388,11 @@ fisherRes <- bind_rows(topASE) %>%
       numeric(1)
     ),
     fdr.p = p.adjust(fisher.p, method = "fdr"),
-    bonf.p = p.adjust(fisher.p, method = "bonf")
-  ) %>%
-  left_join(metadata[,c("sample", "genotype")])
+    bonf.p = p.adjust(fisher.p, method = "bonf"),
+    sample = factor(sample, levels = metadata$sample),
+    chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE)),
+    sigLabel = ifelse(fdr.p < 0.05, "*", "")
+  )
 ```
 
 This was represented as a 2x2 contingency table for enrichment testing using Fisher's exact test.
@@ -407,16 +410,14 @@ dplyr::filter(fisherRes, sample == "7_KB_B12" & chr == "chr17") %>%
 ```
 </center>
 
-```{r fisherTestPlot, fig.height=7.5, fig.cap="*Results from Fisher's exact test for enrichment of ASE genes by chromosome. The -log10 FDR-adjusted p-value is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a FDR-adjust p-value of 0.05.*"}
+```{r fisherTestPlot, fig.height=7.5, fig.cap="*Results from Fisher's exact test for enrichment of ASE genes by chromosome. The -log10(p-value) is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a p-value of 0.05. Samples satisfying a FDR-adjusted p-value of 0.05 show an asterix above the bar.*"}
 fisherRes %>%
-  mutate(
-    sample = factor(sample, levels = metadata$sample),
-    chr = factor(chr, levels = str_sort(unique(chr), numeric = TRUE))
-  ) %>%
-  ggplot(aes(sample, -log10(fdr.p), fill = genotype)) +
+  ggplot(aes(sample, -log10(fisher.p), fill = genotype)) +
   geom_bar(stat = "identity", position = "dodge", colour= "black", width = 0.7) +
-  geom_hline(yintercept = -log10(0.05), linetype = "dashed", ) +
+  geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
+  geom_text(aes(label = sigLabel)) +
   scale_fill_manual(values = genoCols) +
+  coord_cartesian(ylim = c(NA, max(-log10(fisherRes$fisher.p)) + 0.5)) +
   labs(
     title = "Chromosomal enrichment of genes showing ASE",
     x = "Sample",
@@ -434,7 +435,7 @@ fisherRes %>%
 
 As an alternative approach, GSEA was performed using gene sets defined based on the chromosome each gene is located.
 
-The first step for performing GSEA involved creating a ranked list .
+The first step for performing GSEA involved creating a ranked list.
 The methodology that `GeneiASE` uses for calculating p-values posed two issues when constructing a ranked list:
 
 1. Some p-values were 0
@@ -599,23 +600,29 @@ mean <- lapply(pvals, function(sample){
 }) 
 ```
 
-```{r, fig.height=7.5}
-lapply(seq_along(mean), function(ind){
+```{r}
+meanRes <- lapply(seq_along(mean), function(ind){
   x <- mean[[ind]]
   x %>%
     mutate(
       sample = names(mean)[ind],
-      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE))
+      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE)),
+      sigLabel = ifelse(adj.lower < 0.05, "*", "")
     )
 }) %>%
   bind_rows() %>%
-  left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) %>%
-  ggplot(aes(sample, -log10(adj.mean.p))) +
-  geom_bar(stat = "identity", aes(fill = genotype)) +
+  left_join(metadata[,c("alias", "genotype")], by = c("sample" = "alias")) 
+```
+
+```{r, fig.height=7.5}
+meanRes %>%
+  ggplot(aes(sample, -log10(mean.p), fill = genotype)) +
+  geom_bar(stat = "identity", position = "dodge", colour = "black", width = 0.7) +
   geom_errorbar(aes(
-    ymax = -log10(adj.lower),
-    ymin = -log10(adj.upper)
+    ymax = -log10(lower),
+    ymin = -log10(upper)
   ), width = 0.2) +
+  geom_text(aes(label = sigLabel), nudge_y = (-log10(meanRes$lower) - -log10(meanRes$mean.p)) + 0.1) +
   geom_hline(yintercept = -log10(0.05), linetype = "dashed") +
   facet_wrap(~ chromosome) +
   theme(
