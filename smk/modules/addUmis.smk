@@ -1,21 +1,21 @@
 rule addUmis:
 	input:
-		R1 = "00_rawData/fastq/{SAMPLE}_{LANE}_R1.fastq.gz",
-		R2 = "00_rawData/fastq/{SAMPLE}_{LANE}_R2.fastq.gz",
-		UMI = "00_rawData/fastq/{SAMPLE}_{LANE}_I1.fastq.gz"
+		R1 = path.join(analysis.raw_dir, "fastq", "{SAMPLE}" + analysis.pair_tags[0] + analysis.fastq_ext),
+		R2 = path.join(analysis.raw_dir, "fastq", "{SAMPLE}" + analysis.pair_tags[1] + analysis.fastq_ext),
+		UMI = path.join(analysis.raw_dir, "fastq", "{SAMPLE}" + analysis.umi_tag + analysis.fastq_ext),
 	output:
-		R1 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_R1.fastq.gz"),
-		R2 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_R2.fastq.gz"),
-		UMI1 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_I1.fastq.gz"),
-		UMI2 = temp("01_addUmi/fastq/{SAMPLE}_{LANE}_I2.fastq.gz"),
-		html = "01_addUmi/log/{SAMPLE}_{LANE}.html"
+		R1 = temp(path.join(analysis.addUmis_dir, "fastq", "{SAMPLE}" + analysis.pair_tags[0] + analysis.fastq_ext)),
+		R2 = temp(path.join(analysis.addUmis_dir, "fastq", "{SAMPLE}" + analysis.pair_tags[1] + analysis.fastq_ext)),
+		UMI1 = temp(path.join(analysis.addUmis_dir, "fastq", "{SAMPLE}_I1" + analysis.fastq_ext)),
+		UMI2 = temp(path.join(analysis.addUmis_dir, "fastq", "{SAMPLE}_I2" + analysis.fastq_ext)),
+		html = path.join(analysis.addUmis_dir, "log", "{SAMPLE}.html"),
 	conda:
-		"../envs/ase.yaml"
+		"../envs/gatk.yml"
 	resources:
 		cpu = 1,
 		ntasks = 2,
 		mem_mb = 4000,
-		time = "00-01:00:00"
+		time = "00-01:00:00",
 	shell:
 		"""
 		fastp \

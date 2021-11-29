@@ -1,20 +1,17 @@
-## This step adds BAM tags that define UMI groups which are essentially duplicates
-## The resulting BAM files are read for Picard MarkDuplicates
-## Picard MarkDuplicates is preferred over Umi-tools as it allows for random selection of the representative read avoiding mapping bias
 rule groupUmis:
 	input:
-		bam = "04_addRG/bam/{SAMPLE}_{LANE}.bam",
-		bamIndex = "04_addRG/bam/{SAMPLE}_{LANE}.bai"
+		bam = rules.addRG.output.bam,
+		bamIndex = rules.addRG.output.bamIndex,
 	output:
-		bam = "05_groupUmis/bam/{SAMPLE}_{LANE}.bam",
-		bamIndex = "05_groupUmis/bam/{SAMPLE}_{LANE}.bam.bai"
+		bam = temp(path.join(analysis.groupUmis_dir, "bam", "{SAMPLE}.bam")),
+		bamIndex = temp(path.join(analysis.groupUmis_dir, "bam", "{SAMPLE}.bam.bai")),
 	conda:
-		"../envs/ase.yaml"
+		"../envs/gatk.yml"
 	resources:
 		cpu = 1,
 		ntasks = 1,
 		mem_mb = 8000,
-		time = "00-05:00:00"
+		time = "00-05:00:00",
 	shell:
 		"""
 		umi_tools group \
