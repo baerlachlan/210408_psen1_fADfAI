@@ -13,7 +13,7 @@ cluster:
     --parsable
 restart-times: 0
 jobs: 100
-max-jobs-per-second: 5
+max-jobs-per-second: 2
 cluster-status: status-sacct.sh
 max-status-checks-per-second: 5
 local-cores: 1
@@ -22,4 +22,4 @@ latency-wait: 60
 rerun-incomplete: True
 printshellcmds: True
 scheduler: greedy
-notemp: True  ## If storage quotas permit, I prefer to hold temp files and use --delete-temp-output upon completion.
+notemp: True  ## If storage quotas permit, I prefer to hold temp files and use --delete-temp-output upon completion

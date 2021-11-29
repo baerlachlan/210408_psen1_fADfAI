@@ -1,4 +1,3 @@
-## Check anaconda.org for new package versions
 channels:
  - bioconda
  - conda-forge
@@ -11,4 +10,3 @@ dependencies:
  - umi_tools=1.1.1
  - gatk4=4.2.0.0
  - samtools=1.11
- - bcftools=1.11
