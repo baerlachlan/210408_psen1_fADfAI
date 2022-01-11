@@ -651,7 +651,7 @@ Each overlapping read is output as a set of synthetic reads in `FASTQ` format wi
 4. Reads where one or more allelic versions fail to map back to the same location are removed using `filter_remapped_reads.py` script.
 5. Reads that did not overlap SNVs are merged with those that show unbiased mapping from step 4 using `samtools`, resulting in a complete set of mappability-filtered aligned reads in `BAM` format.
 
-To begin the `WASP` fltering procedure, input files containing genetic variants (SNVs) previously identified by the `GATK` workflow are needed.
+To begin the `WASP` filtering procedure, input files containing genetic variants (SNVs) previously identified by the `GATK` workflow are needed.
 Since we do not have phasing information, it is recommended to use text-based format opposed to `HDF5` for the input files.
 The text-based input files require three space-delimited columns (position, ref_allele, alt_allele), and one input file per chromosome.
 The filenames must follow the convention `<chr>.snps.txt.gz` (e.g `1.snps.txt.gz` for chromosome 1).

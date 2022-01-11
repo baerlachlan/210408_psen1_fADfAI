@@ -27,3 +27,4 @@ analysis-variant_discovery/*_STARgenome*
 analysis-variant_discovery/*addUmis/log/*
 analysis-variant_discovery/*trim/log/*
 analysis-variant_discovery/*align/log/*
+.Rproj.user
