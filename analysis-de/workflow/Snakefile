@@ -1,0 +1,8 @@
+import os
+
+configfile: "config/config.yml"
+
+rule all:
+
+
+include: "rules/common.smk"

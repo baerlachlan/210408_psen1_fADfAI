@@ -1,0 +1,5 @@
+species: "danio_rerio"
+assembly: "GRCz11"
+ensembl_release: 101
+fastq_ext: ".fastq.gz"
+pair_tags: ""

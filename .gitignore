@@ -1,5 +1,6 @@
 ## Common large files
 *.fastq.gz
+*.fq.gz
 *.fa
 *.bam
 *.bai
@@ -11,20 +12,7 @@
 */.snakemake/
 */smk/log/
 *__pycache__*
-*.snakemake-timestamp
+*.snakemake_timestamp
 
-## Project files
+## Project-specific files
 *fgsea*.Rds
-
-## Variant discovery analysis files
-analysis-variant_discovery/refs/*
-analysis-variant_discovery/*/2_genomicsDB/*
-analysis-variant_discovery/**/*.firstPass.table
-analysis-variant_discovery/**/*.secondPass.table
-analysis-variant_discovery/.Rproj.user
-analysis-variant_discovery/*_STARpass*
-analysis-variant_discovery/*_STARgenome*
-analysis-variant_discovery/*addUmis/log/*
-analysis-variant_discovery/*trim/log/*
-analysis-variant_discovery/*align/log/*
-.Rproj.user
