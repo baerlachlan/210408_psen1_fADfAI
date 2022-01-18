@@ -1,5 +1,12 @@
 species: "danio_rerio"
 assembly: "GRCz11"
 ensembl_release: 101
+read_length: 100
 fastq_ext: ".fastq.gz"
-pair_tags: ""
+paired_end:
+  activate: True
+  tags: ["_R1", "_R2"]  # Remove if not activated
+merge_lanes:
+  activate: True
+  tags: ["_L001", "_L002"]  # Remove if not activated
+samples_tsv:

@@ -1,0 +1,6 @@
+## Analysis-specific files
+resources/*
+*_STARpass*
+*_STARgenome*
+*/*trim/log/*
+*/*counts/log/*

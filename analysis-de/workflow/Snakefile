@@ -1,8 +1,40 @@
 import os
+import pandas as pd
+from snakemake.utils import min_version
+
+min_version("6.2.1")
+
 
 configfile: "config/config.yml"
 
+include: "rules/setup.smk"
+
+## Avoid ambiguity in filenames when multiple wildcards are used
+## https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#wildcards
+wildcard_constraints:
+    SAMPLE = "|".join([sample for sample in samples]),
+    PAIRTAG = "|".join([tag for tag in config['paired_end']['tags']]),
+    MERGETAG = "|".join([tag for tag in config['merge_lanes']['tags']]),
+
 rule all:
+    input:
+        workflow_outputs()
+
+include: "rules/refs.smk"
+include: "rules/fastqc.smk"
+if config["merge_lanes"]["activate"]:
+    include: "rules/merge_lanes.smk"
+if config["paired_end"]["activate"]:
+    include: "rules/trim_pe.smk"
+    include: "rules/align_pe.smk"
+    include: "rules/count_pe.smk"
+else:
+    include: "rules/trim_se.smk"
+    include: "rules/align_se.smk"
+    include: "rules/count_se.smk"
 
 
-include: "rules/common.smk"
+localrules: refs_downloadFa, refs_downloadGtf
+
+## To do:
+##  - Remove HOME=/hpcfs/users/$USER
