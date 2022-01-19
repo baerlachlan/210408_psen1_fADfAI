@@ -31,7 +31,7 @@ rule refs_starIndex:
     output:
         temp(directory(os.path.join("resources", "star"))),
     params:
-        overhang = config["read_length"] - 1,
+        overhang = config["align"]["read_length"] - 1,
     conda:
         "../envs/align.yml"
     resources:

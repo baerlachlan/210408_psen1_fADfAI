@@ -1,10 +1,10 @@
-rule merge_lanes:
+rule merge_fastq:
     input:
         fq = expand(
             os.path.join(
                 "results", raw_dir, "fastq", "{{SAMPLE}}{MERGETAG}{{PAIRTAG}}" + config["fastq_ext"]
             ),
-            MERGETAG=config["merge_lanes"]["tags"]
+            MERGETAG=config["merge_fastq"]["tags"]
         ),
     output:
         fq = temp(os.path.join(

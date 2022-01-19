@@ -11,6 +11,10 @@ rule trim_pe:
             "{SAMPLE}" + config["paired_end"]["tags"][1] + config["fastq_ext"]
         )),
         html = os.path.join("results", trim_dir, "log", "{SAMPLE}.html")
+    params:
+        qual = config["trim"]["phred_qual"],
+        length = config["trim"]["length"],
+        extra = config["trim"]["extra"],
     conda:
         "../envs/trim.yml"
     resources:
@@ -26,10 +30,11 @@ rule trim_pe:
             -o {output.R1} \
             -O {output.R2} \
             --detect_adapter_for_pe \
-            --qualified_quality_phred 20 \
-            --length_required 35 \
+            --qualified_quality_phred {params.qual} \
+            --length_required {params.length} \
             --trim_poly_g \
             --thread 1 \
             --html {output.html} \
             --json /dev/null \
+            {params.extra}
         """

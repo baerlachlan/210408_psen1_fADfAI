@@ -4,8 +4,8 @@
 
 if not config["paired_end"]["activate"]:
     config["paired_end"]["tags"] = None
-if not config["merge_lanes"]["activate"]:
-    config["merge_lanes"]["tags"] = None
+if not config["merge_fastq"]["activate"]:
+    config["merge_fastq"]["tags"] = None
 
 ####
 ## Directory structure
@@ -18,7 +18,7 @@ trim_ind = 2
 align_ind = 3
 counts_ind = 4
 ## Index decreases by 1 for any steps following optional steps that are not run
-if not config["merge_lanes"]["activate"]:
+if not config["merge_fastq"]["activate"]:
     trim_ind -= 1
     align_ind -= 1
     counts_ind -= 1
@@ -45,8 +45,8 @@ else:
     if config["paired_end"]["activate"]:
         for tag in config["paired_end"]["tags"]:
             samples = [sample.replace(tag, "") for sample in samples]
-    if config["merge_lanes"]["activate"]:
-        for tag in config["merge_lanes"]["tags"]:
+    if config["merge_fastq"]["activate"]:
+        for tag in config["merge_fastq"]["tags"]:
             samples = [sample.replace(tag, "") for sample in samples]
     samples = list(dict.fromkeys(samples))  ## Remove duplicates
 
@@ -54,14 +54,10 @@ else:
 ## Reference files
 ####
 
-species = config["species"]
-assembly = config["assembly"]
-ensembl_release = config["ensembl_release"]
-
 refGz = os.path.join(
     ".".join([
-        species.capitalize(),
-        assembly,
+        config["ref"]["species"].capitalize(),
+        config["ref"]["assembly"],
         "dna.primary_assembly.fa.gz"
     ])
 )
@@ -70,26 +66,26 @@ refFa = refGz.rstrip(".gz")
 refFa_path = os.path.join("resources", refFa)
 ref_url = os.path.join(
     "rsync://ftp.ensembl.org/ensembl/pub",
-    "release-" + str(ensembl_release),
+    "release-" + str(config["ref"]["ensembl_release"]),
     "fasta",
-    species,
+    config["ref"]["species"],
     "dna",
     refGz
 )
 gtf = os.path.join(
     ".".join([
-        species.capitalize(),
-        assembly,
-        str(ensembl_release),
+        config["ref"]["species"].capitalize(),
+        config["ref"]["assembly"],
+        str(config["ref"]["ensembl_release"]),
         "chr.gtf.gz"
     ])
 )
 gtf_path = os.path.join("resources", gtf)
 gtf_url = os.path.join(
     "rsync://ftp.ensembl.org/ensembl/pub",
-    "release-" + str(ensembl_release),
+    "release-" + str(config["ref"]["ensembl_release"]),
     "gtf",
-    species,
+    config["ref"]["species"],
     gtf
 )
 
@@ -98,19 +94,28 @@ gtf_url = os.path.join(
 ####
 
 def trim_inputs_pe(wildcards):
-    # if config["merge_lanes"]["activate"]:
     return {
         "R1": os.path.join(
             "results",
-            merge_dir if config["merge_lanes"]["activate"] else raw_dir,
+            merge_dir if config["merge_fastq"]["activate"] else raw_dir,
             "fastq",
             wildcards.SAMPLE + config["paired_end"]["tags"][0] + config["fastq_ext"]
         ),
         "R2": os.path.join(
             "results",
-            merge_dir if config["merge_lanes"]["activate"] else raw_dir,
+            merge_dir if config["merge_fastq"]["activate"] else raw_dir,
             "fastq",
             wildcards.SAMPLE + config["paired_end"]["tags"][1] + config["fastq_ext"]
+        )
+    }
+
+def trim_inputs_se(wildcards):
+    return {
+        "R1": os.path.join(
+            "results",
+            merge_dir if config["merge_fastq"]["activate"] else raw_dir,
+            "fastq",
+            wildcards.SAMPLE + config["fastq_ext"]
         )
     }
 
@@ -124,33 +129,29 @@ def workflow_outputs():
 
     ## FastQC reports
     fqc_raw = expand(
-        os.path.join("results", raw_dir, "FastQC/{SAMPLE}{LANETAG}{PAIRTAG}_fastqc.{EXT}"),
+        os.path.join("results", raw_dir, "FastQC/{SAMPLE}{MERGETAG}{PAIRTAG}_fastqc.{EXT}"),
         SAMPLE=samples,
-        LANETAG=config["merge_lanes"]["tags"],
+        MERGETAG=config["merge_fastq"]["tags"],
         PAIRTAG=config["paired_end"]["tags"],
         EXT=["html", "zip"],
     )
     outputs.extend(fqc_raw)
-    # fqc_trim = expand(
-    #     os.path.join(trim_dir, "FastQC/{SAMPLE}{MERGETAG}{PAIRTAG}_fastqc.{EXT}"),
-    #     SAMPLE=samples,
-    #     MERGETAG=lane_tags,
-    #     PAIRTAG=pair_tags,
-    #     EXT=["html", "zip"]
-    # )
-    # outputs.extend(fqc_trim)
-    # fqc_align = expand(
-    #     os.path.join(align_dir, "FastQC/{SAMPLE}{MERGETAG}_fastqc.{EXT}"),
-    #     SAMPLE=samples,
-    #     MERGETAG=lane_tags,
-    #     EXT=["html", "zip"]
-    # )
-    # outputs.extend(fqc_align)
+    fqc_trim = expand(
+        os.path.join("results", trim_dir, "FastQC/{SAMPLE}{PAIRTAG}_fastqc.{EXT}"),
+        SAMPLE=samples,
+        PAIRTAG=config["paired_end"]["tags"],
+        EXT=["html", "zip"]
+    )
+    outputs.extend(fqc_trim)
+    fqc_align = expand(
+        os.path.join("results", align_dir, "FastQC/{SAMPLE}_fastqc.{EXT}"),
+        SAMPLE=samples,
+        EXT=["html", "zip"]
+    )
+    outputs.extend(fqc_align)
 
-    ## Tmp
-    # tmp = expand(os.path.join("results", trim_dir, "fastq", "{SAMPLE}{PAIRTAG}" + config["fastq_ext"]), SAMPLE=samples, PAIRTAG=config["paired_end"]["tags"])
-    # tmp = expand(os.path.join("results", align_dir, "bam", "{SAMPLE}.bam"), SAMPLE=samples)
-    tmp = os.path.join("results", counts_dir, "counts.out")
-    outputs.extend([tmp])
+    ## Counts
+    counts = os.path.join("results", counts_dir, "counts.out")
+    outputs.extend([counts])
 
     return(outputs)

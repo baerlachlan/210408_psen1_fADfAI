@@ -10,11 +10,10 @@ configfile: "config/config.yml"
 include: "rules/setup.smk"
 
 ## Avoid ambiguity in filenames when multiple wildcards are used
-## https://snakemake.readthedocs.io/en/stable/snakefiles/rules.html#wildcards
 wildcard_constraints:
     SAMPLE = "|".join([sample for sample in samples]),
     PAIRTAG = "|".join([tag for tag in config['paired_end']['tags']]),
-    MERGETAG = "|".join([tag for tag in config['merge_lanes']['tags']]),
+    MERGETAG = "|".join([tag for tag in config['merge_fastq']['tags']]),
 
 rule all:
     input:
@@ -22,17 +21,15 @@ rule all:
 
 include: "rules/refs.smk"
 include: "rules/fastqc.smk"
-if config["merge_lanes"]["activate"]:
-    include: "rules/merge_lanes.smk"
+if config["merge_fastq"]["activate"]:
+    include: "rules/merge_fastq.smk"
 if config["paired_end"]["activate"]:
     include: "rules/trim_pe.smk"
     include: "rules/align_pe.smk"
-    include: "rules/count_pe.smk"
 else:
     include: "rules/trim_se.smk"
     include: "rules/align_se.smk"
-    include: "rules/count_se.smk"
-
+include: "rules/count.smk"
 
 localrules: refs_downloadFa, refs_downloadGtf
 

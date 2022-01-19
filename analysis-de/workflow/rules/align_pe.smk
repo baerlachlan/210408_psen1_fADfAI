@@ -9,10 +9,11 @@ rule align_pe:
         STARgenome = temp(directory(os.path.join("results", align_dir, "bam", "{SAMPLE}_STARgenome"))),
         STARpass1 = temp(directory(os.path.join("results", align_dir, "bam", "{SAMPLE}_STARpass1"))),
     params:
-        overhang = config["read_length"] - 1,
+        overhang = config["align"]["read_length"] - 1,
         bname = os.path.join("results", align_dir, "bam", "{SAMPLE}"),
         bamUnsorted = os.path.join("results", align_dir, "bam", "{SAMPLE}Aligned.out.bam"),
         align_dir = align_dir,
+        extra = conig["align"]["extra"],
     conda:
         "../envs/align.yml"
     resources:
@@ -30,7 +31,8 @@ rule align_pe:
             --sjdbOverhang {params.overhang} \
             --outSAMtype BAM Unsorted \
             --twopassMode Basic \
-            --outFileNamePrefix {params.bname}
+            --outFileNamePrefix {params.bname} \
+            {params.extra}
 
         samtools sort {params.bamUnsorted} > {output.bam}
         samtools index {output.bam}
