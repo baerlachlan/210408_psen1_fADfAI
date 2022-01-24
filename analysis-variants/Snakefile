@@ -4,6 +4,7 @@ from smk.workflow_config import RNASeqVariantDiscovery
 
 ## To do:
 ##  - Remove HOME=/hpcfs/users/$USER
+##  - Remove curl from refs.smk
 
 analysis = RNASeqVariantDiscovery(
     species="danio_rerio",
