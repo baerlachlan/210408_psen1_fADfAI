@@ -143,7 +143,6 @@ vcf <- suppressWarnings({
   # readVcf(vcf_file)
 })
 samples <- samples(header(vcf))
-sample <- samples[[1]]
 ```
 
 ```{r}
