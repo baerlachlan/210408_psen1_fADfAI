@@ -35,6 +35,7 @@ rule variants_gvcf:
 
         gatk \
             CollectVariantCallingMetrics \
+            --GVCF_INPUT true \
             --DBSNP {input.knownVariants} \
             --INPUT {output.gvcf} \
             --OUTPUT {params.metricsBname}
@@ -84,6 +85,7 @@ rule variants_genomicsDB:
 
 rule variants_genotype:
     input:
+        unpack(analysis.knownVariants_files),
         genDB_dir = rules.variants_genomicsDB.output.genDB_dir,
         refFa = rules.refs_downloadFa.output,
         refIndex = rules.refs_refIndex.output,
@@ -91,8 +93,11 @@ rule variants_genotype:
     output:
         vcf = temp(os.path.join(analysis.variants_dir, "3_jointGenotype", "all_samples.vcf.gz")),
         vcfIndex = temp(os.path.join(analysis.variants_dir, "3_jointGenotype", "all_samples.vcf.gz.tbi")),
+        detailMetrics = os.path.join(analysis.variants_dir, "3_jointGenotype", "log", "all_samples.variant_calling_detail_metrics"),
+        summaryMetrics = os.path.join(analysis.variants_dir, "3_jointGenotype", "log", "all_samples.variant_calling_summaroutput: html_documenty_metrics"),
     params:
         gendb = os.path.join("gendb://" + analysis.variants_dir, "2_genomicsDB"),
+        metricsBname = os.path.join(analysis.variants_dir, "3_jointGenotype", "log", "all_samples"),
     conda:
         "../envs/gatk.yml"
     resources:
@@ -102,10 +107,17 @@ rule variants_genotype:
         time = "01-00:00:00",
     shell:
         """
-        gatk --java-options "-Xmx16g" GenotypeGVCFs \
-            -R {input.refFa} \
-            -V {params.gendb} \
-            -O {output.vcf}
+        gatk --java-options "-Xmx16g" \
+            GenotypeGVCFs \
+                -R {input.refFa} \
+                -V {params.gendb} \
+                -O {output.vcf}
+
+        gatk \
+            CollectVariantCallingMetrics \
+            --DBSNP {input.knownVariants} \
+            --INPUT {output.vcf} \
+            --OUTPUT {params.metricsBname}
         """
 
 rule variants_extract:
