@@ -138,9 +138,10 @@ genoCols <- metadata$genotype %>%
 ```
 
 ```{r}
-counts <- read_tsv(here("03_align/featureCounts/genes.out")) %>%
+counts <- read_tsv(here("analysis-de/results/04_counts/counts.out"), comment = "#") %>%
+  dplyr::select(-c(Chr, Start, End, Strand, Length)) %>%
   set_colnames(basename(colnames(.))) %>%
-  set_colnames(str_remove(colnames(.), ".bam"))
+  set_colnames(str_remove(colnames(.), "\\.bam"))
 ```
 
 ```{r}
@@ -726,7 +727,7 @@ topTables$`EOfAD-like/+` %>%
   )
 ```
 
-```{r, fig.cap="*Heatmap of DE genes in the comparison between EOfAD-like/+ and WT genotypes. Values a logCPM after CQN.*"}
+```{r, fig.cap="*Heatmap of DE genes in the comparison between EOfAD-like/+ and WT genotypes. Values are logCPM.*"}
 cpm[deGenes$`EOfAD-like/+`,] %>%
   as.data.frame() %>%
   dplyr::select(all_of(fadComp)) %>%
@@ -746,6 +747,12 @@ cpm[deGenes$`EOfAD-like/+`,] %>%
 
 ```{r, fig.height=4, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
 deCpmPlots[[1]]
+```
+
+### Chromosomal effect
+
+```{r}
+
 ```
 
 ## fAI-like mutation
@@ -774,7 +781,7 @@ topTables$`fAI-like/+` %>%
   )
 ```
 
-```{r, fig.cap="*Heatmap of DE genes in the comparison between fAI-like/+ and WT genotypes. Values a logCPM after CQN.*"}
+```{r, fig.cap="*Heatmap of DE genes in the comparison between fAI-like/+ and WT genotypes. Values are logCPM.*"}
 cpm[deGenes$`fAI-like/+`,] %>%
   as.data.frame() %>%
   dplyr::select(all_of(faiComp)) %>%

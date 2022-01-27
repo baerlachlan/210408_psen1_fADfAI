@@ -64,12 +64,6 @@ cores <- availableCores() - 1
 source("~/bioinformatics/bioToolkit/lbFuncs.R")
 ```
 
-```{r}
-## Choose either remote or local project directory
-# projDir <- here()
-projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI"
-```
-
 ## EnsDb
 
 ```{r}
@@ -89,7 +83,7 @@ An `EnsDb` object for Ensembl release 101 was setup for extracting gene and exon
 ## Metadata
 
 ```{r}
-metadata <- read_csv(file.path(projDir, "files/samples.csv")) %>%
+metadata <- read_csv(here("files/samples.csv")) %>%
   dplyr::select(-sample) %>%
   mutate(
     Genotype = factor(Genotype, levels = unique(Genotype)),
@@ -126,10 +120,77 @@ compCols <- genoCols[1:2]
 drChrs <- seq(1:25)
 ```
 
-# GATK short variant discovery
+# Pre-processing
 
-The [GATK best practices workflow for short variant discovery](https://gatk.broadinstitute.org/hc/en-us/articles/360035531192-RNAseq-short-variant-discovery-SNPs-Indels-) was followed to produce variants calls in `VCF` format from raw RNA-seq `FASTQ` data.
-The following document describes the workflow and modifications implemented to reach the end goal of accurate allelic read counts for measurement of Allele Specific Expression (ASE).
+## Raw data
+
+```{r}
+rawFqc <- list.files(
+  path = here("00_rawData/FastQC/"),
+  pattern = "zip",
+  full.names = TRUE
+) %>%
+  subset(str_detect(., "L001")) %>%
+  FastqcDataList()
+```
+
+### Library sizes
+
+Library Sizes for the raw, unprocessed dataset ranged between `r pander(comma(range(readTotals(rawFqc)$Total_Sequences)))` reads.
+
+```{r, fig.cap="*Read totals for all libraries sequenced on lane 1. Lane 2 libraries are excluded for ease of viewing.*"}
+plotReadTotals(rawFqc)
+```
+
+### GC content
+
+```{r, fig.cap="*GC content distributions for all samples. Hover for more details.*"}
+plotly::ggplotly({
+  plotGcContent(
+    x = rawFqc, 
+    plotType = "line",
+    gcType = "Transcriptome",
+    species = "Drerio"
+  ) +
+    theme(legend.position = "none")
+})
+```
+
+## Trimmed data
+
+Trimming software was setup carefully with the intention to perform downstream detection of short variants following the `GATK` workflow.
+Part of this process involves the removal of duplicate reads which relies on detection of duplicates by comparing sequences in the 5' positions.
+Trimming can therefore be detrimental to downstream analysis.
+As such, the trimming procedure was performed more so as a filtering step, where reads were discarded if:
+
+1. 40% of the bases did not meet the threshold of a 20 phred quality score.
+2. reads were shorter than 35 base pairs in length.
+
+```{r}
+trimFqc <- list.files(
+  path = here("02_trim/FastQC/"),
+  pattern = "zip",
+  full.names = TRUE
+) %>%
+  FastqcDataList()
+trimStats <- readTotals(rawFqc) %>%
+  dplyr::rename(Raw = Total_Sequences) %>%
+  left_join(readTotals(trimFqc), by = "Filename") %>%
+  dplyr::rename(Trimmed = Total_Sequences) %>%
+  mutate(
+    Discarded = 1 - Trimmed/Raw,
+    Retained = Trimmed / Raw
+  )
+```
+
+After trimming between `r pander(range(percent_format(0.01)(trimStats$Discarded)))` of reads were discarded.
+
+## Aligned data
+
+Trimmed reads were aligned to GRCz11 reference genome (Ensembl release 101) with `STAR 2.7.7a`.
+`STAR`'s two-pass mode was implemented to achieve better alignments around novel splice junctions.
+
+# GATK short variant discovery
 
 ## Duplicates
 
@@ -142,7 +203,7 @@ This was performed with `UMI-tools group`, which tagged duplicate groups in the 
 
 ```{r}
 dupeMetrics <- list.files(
-  file.path(projDir, "analysis-variants/07_markDuplicates/samstats"),
+  here("06_markDuplicates/samstats"),
   full.names = TRUE
 ) %>%
   lapply(function(x){
@@ -177,8 +238,7 @@ The process involves two keys steps performed by tools `BaseRecalibrator` and `A
 **BaseRecalibrator**
 
 `BaseRecalibrator` builds a model of covariation based on the input data and a set of known variants.
-The set of known variants for this analysis was retrieved from the [Ensembl Variation database](https://asia.ensembl.org/info/genome/variation/index.html).
-It is also possible to generate a set of known variants from the data itself if a reference is not available.
+Since this dataset originates from zebrafish which are highly polymorphic, the set of known variants was generated directly from the data as opposed to obtaining it from an online database.
 Details about this procedure are described [here](https://gatk.broadinstitute.org/hc/en-us/articles/360035890531-Base-Quality-Score-Recalibration-BQSR-).
 `BaseRecalibrator` records data about the following features of aligned bases:
 
@@ -203,7 +263,7 @@ This allows for more statistically robust downstream variant calling.
 
 ```{r}
 files <- list.files(
-  file.path(projDir, "analysis-variants/04_addRG/samstats"),
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/04_addRG/samstats",
   full.names = TRUE
 )
 beforeRecalMetrics <- lapply(files, read_lines) %>%
@@ -239,7 +299,7 @@ beforeRecalQuality <- map2(beforeRecalMetrics, files, function(.x, .y){
 
 ```{r}
 files <- list.files(
-  file.path(projDir, "analysis-variants/09_bqsr/metrics"),
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/09_recalBases/metrics",
   full.names = TRUE
 )
 afterRecalMetrics <- lapply(files, read_lines) %>%
@@ -278,7 +338,7 @@ For this dataset the number of aligned bases ranged between `r pander(comma(rang
 
 ```{r}
 files <- list.files(
-  file.path(projDir, "analysis-variants/09_bqsr/recal"),
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/09_recalBases/recal",
   pattern = "analyzeCovariates",
   full.names = TRUE
 )
@@ -369,7 +429,7 @@ lapply(recalCovariates[c(1, 9, 15, 19)], function(x){
 
 Variants were restricted to those that lie only in exonic regions of the Ensembl version 101 primary assembly.
 For zebrafish this consists of chromosomes `r min(drChrs)` to `r max(drChrs)`.
-To perform this within the `GATK`'s tools, an interval list was created containing the exonic ranges.
+To perform this inside of `GATK`'s variant calling `HaploypeCaller` command, an interval list was created containing the exonic ranges.
 A number of interval list formats are supported by GATK as described [here](https://gatk.broadinstitute.org/hc/en-us/articles/360035531852-Intervals-and-interval-lists).
 The GATK-style `.intervals` is poorly described but requires the format `<chr>:<start>-<end>` e.g. `1:1367-1367` for a singular base position. 
 The nomenclature must match that of the chosen reference, for example, Ensembl labels chromosome 1 as "1", not "chr1".
@@ -378,17 +438,68 @@ The GATK-style format was chosen for its simplicity.
 Defining intervals before calling variants also has the advantage of a large speed-up in computational processing time.
 `HaplotypeCaller` is the longest step in the `GATK` short variant discovery pipeline, sometimes taking over a day to process for large datasets on a HPC system when interval lists are not utilised.
 
-The construction of this interval list was implemented inside the `snakemake` workflow as a custom `R` script ([GitHub link]("https://github.com/baerlachlan/210408_psen1_fADfAI/blob/master/analysis-variants/smk/scripts/intervals.R")).
+```{r}
+exonRanges <- exons %>%
+  unlist() %>%
+  GenomicRanges::reduce() %>%
+  as.data.frame() %>%
+  dplyr::filter(seqnames %in% drChrs) %>%
+  dplyr::select(chromosome = seqnames, start, end)
+```
+
+```{r}
+intervalPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/refs/exons.intervals"
+makeIntervals <- !file.exists(intervalPath)
+if (makeIntervals) {
+  if (!dir.exists(dirname(intervalPath))) {
+    dir.create(dirname(intervalPath), recursive = TRUE)
+  }
+  tibble(
+    interval = paste0(
+      exonRanges$chromosome,
+      ":",
+      exonRanges$start,
+      "-",
+      exonRanges$end
+    )
+  ) %>%
+    write.table(
+      file = intervalPath,
+      col.names = FALSE,
+      row.names = FALSE,
+      quote = FALSE
+    )
+}
+```
+
+The intervals were also exported as a `BED` file as some software prefer this format.
+
+```{r}
+bedPath <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/refs/exons.bed"
+makeBed <- !file.exists(bedPath)
+if (makeBed) {
+  if (!dir.exists(dirname(bedPath))) {
+    dir.create(dirname(bedPath), recursive = TRUE)
+  }
+  tibble(
+    seqnames = exonRanges$chromosome,
+    start = exonRanges$start,
+    end = exonRanges$end
+  ) %>%
+    write.table(
+      file = bedPath,
+      quote = FALSE,
+      sep = "\t",
+      col.names = FALSE,
+      row.names = FALSE
+    )
+}
+```
 
 ## Variant calling
 
-With the intention to perform downstream ASE analysis, initial variants were restricted to only biallelic SNVs.
-
-```{r}
-
-```
-
-Additionally, for RNA-seq data, the `GATK` recommends [specific hard filters](https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants).
+With the to perform downstream ASE analysis, initial variants were restricted to only biallelic SNVs.
+Additionally, for RNA-seq data, `GATK` recommends [specific hard filters](https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants).
 Variants were removed with the following filters:
 
 - QualByDepth: QD < 2.0
@@ -411,7 +522,8 @@ This compares whether the positions of the reference and alternate alleles are d
 
 ```{r}
 calledMetrics <- list.files(
-  path = file.path(projDir, "analysis-variants/10_variants/1_gvcf/log"),
+  # path = here("08_callSnvs/1_called/log/"),
+  path = "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_callSnvs/1_called/log/",
   pattern = "detail",
   full.names = TRUE
 ) %>%
@@ -420,7 +532,8 @@ calledMetrics <- list.files(
   dplyr::select(-contains(c("DBSNP", "DB_SNP", "NOVEL"))) %>%
   as.data.frame()
 extractedMetrics <- list.files(
-  path = file.path(projDir, "analysis-variants/10_variants/4_extract/log"),
+  # path = here("08_callSnvs/2_extracted/log/"),
+  path = "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_callSnvs/2_extracted/log/",
   pattern = "detail",
   full.names = TRUE
 ) %>%
@@ -429,7 +542,8 @@ extractedMetrics <- list.files(
   dplyr::select(-contains(c("DBSNP", "DB_SNP", "NOVEL"))) %>%
   as.data.frame()
 filteredMetrics <- list.files(
-  path = file.path(projDir, "analysis-variants/10_variants/5_filter/log"),
+  # path = here("08_callSnvs/3_filtered/log/"),
+  path = "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_callSnvs/3_filtered/log/",
   pattern = "detail",
   full.names = TRUE
 ) %>%
@@ -438,7 +552,8 @@ filteredMetrics <- list.files(
   dplyr::select(-contains(c("DBSNP", "DB_SNP", "NOVEL"))) %>%
   as.data.frame()
 selectedMetrics <- list.files(
-  path = file.path(projDir, "analysis-variants/10_variants/6_select/log"),
+  # path = here("08_callSnvs/4_selected/log/"),
+  path = "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_callSnvs/4_selected/log/",
   pattern = "detail",
   full.names = TRUE
 ) %>%
@@ -458,16 +573,72 @@ filtProgress <- selectedMetrics %>%
   left_join(filtProgress)
 ```
 
-After `GATK` recommended hard filters were applied the number of biallelic SNVs ready for ASE analysis ranged between `r pander(comma(range(filtProgress$GATK)))`.
+After `GATK` recommended hard filters were applied thhe number of biallelic SNVs ready for ASE analysis ranged between `r pander(comma(range(filtProgress$GATK)))`.
 
 # Allele Specific Expression
 
 There are a number of important quality control measures that must be taken to ensure reliable data for allele specific expression (ASE) testing. 
 The following procedures are based around the guidelines described in [Castel et al. Tools and Best Practices for allelic expression analysis.](https://www.biorxiv.org/content/biorxiv/early/2015/03/05/016097.full.pdf)
 
+To gather SNV information as determined by the `GATK` workflow, `VCF` files were converted into `GDS` objects.
+`GDS` objects allow for easy access of the data in `R`, but are large so were kept on the HPC system.
+
+```{r, results='hide'}
+vcfPaths <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_callSnvs/4_selected",
+  pattern = ".vcf.gz$",
+  full.names = TRUE
+)
+lapply(vcfPaths, function(vcf){
+  gdsPath <- paste0(
+    str_remove(dirname(vcf), "4_selected"),
+    "5_gds/",
+    str_remove(basename(vcf), ".vcf.gz"),
+    ".gds"
+  )
+  if (!file.exists(gdsPath)) {
+    if (!dir.exists(dirname(gdsPath))) {
+      dir.create(dirname(gdsPath), recursive = TRUE)
+    }
+    seqVCF2GDS(vcf, gdsPath)
+  }
+})
+```
+
+```{r}
+gdsPaths <- list.files(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/10_callSnvs/5_gds",
+  pattern = ".gds$",
+  full.names = TRUE
+)
+```
+
+```{r}
+snvList <- lapply(seq_along(gdsPaths), function(x){
+  gdsPath <- gdsPaths[x]
+  sample <- basename(gdsPath) %>%
+    str_remove(".gds")
+  gds <- seqOpen(gdsPath, readonly = FALSE)
+  snvs <- tibble(
+    variant.id = seqGetData(gds, "variant.id"),
+    chromosome = seqGetData(gds, "chromosome"),
+    position = seqGetData(gds, "position"),
+    allele = seqGetData(gds, "allele"),
+    filter = seqGetData(gds, "annotation/filter")
+  ) %>%
+    mutate(
+      sample = sample,
+      refAllele = str_split(allele, ",", simplify = TRUE)[,1],
+      altAllele = str_split(allele, ",", simplify = TRUE)[,2]
+    )
+  seqClose(gds)
+  return(snvs)
+})
+```
+
 ### WASP
 
-Read mapping is a potential source of bias for ASE analysis.
+An important aspect to consider in ASE analysis is the potential for read mapping bias.
 For RNA-seq data mapped to a reference genome, reads that carry an alternate allele at positions of variation have at least one mismatch, and therefore a lower probability of aligning correctly than reads containing the reference allele.
 
 `WASP` provides a suite of tools for unbiased allele-specific read mapping.
@@ -484,15 +655,43 @@ To begin the `WASP` filtering procedure, input files containing genetic variants
 Since we do not have phasing information, it is recommended to use text-based format opposed to `HDF5` for the input files.
 The text-based input files require three space-delimited columns (position, ref_allele, alt_allele), and one input file per chromosome.
 The filenames must follow the convention `<chr>.snps.txt.gz` (e.g `1.snps.txt.gz` for chromosome 1).
-This was implemented in the `snakemake` workflow as a custom `R` script.
 
-Text-based input files were created within the `snakemake` workflow as a custom `R` script.
-`WASP` filtering was subsequently performed on the HPC system.
-The resulting `BAM` files were then ready for allele specific expression read counting with `ASEReadCounter`.
+```{r, results='hide'}
+lapply(snvList, function(x){
+  chrList <- x %>%
+    dplyr::select(chromosome, position, refAllele, altAllele, sample) %>%
+    split(.[,'chromosome'])
+  lapply(chrList, function(x){
+    chr <- unique(x$chromosome)
+    sample <- unique(x$sample)
+    path <- paste0(
+      "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/11_wasp/1_snvs/",
+      sample,
+      "/",
+      chr,
+      ".snps.txt.gz"
+    )
+    if (!file.exists(path)) {
+      if (!dir.exists(dirname(path))) {
+        dir.create(dirname(path), recursive = TRUE)
+      }
+      tibble(
+        position = x$position,
+        refAllele = x$refAllele,
+        altAllele = x$altAllele
+      ) %>%
+        write_delim(file = path, delim = " ", col_names = FALSE)
+    }
+  })
+})
+```
+
+Text-based input files were created for `WASP` filtering, which was subsequently performed on the HPC system.
+The resulting `BAM` files were then subject to allele specific expression read counting with `ASEReadCounter`.
 
 ### ASEReadCounter
 
-The `GATK`'s `ASEReadCounter` tool calculates allele counts at a set of positions after applying filters specifically tuned for ASE analysis of RNA-seq data.
+`GATK` tool `ASEReadCounter` calculates allele counts at a set of positions after applying filters specifically tuned for ASE analysis of RNA-seq data.
 The filters operate on mapping quality, base quality, depth of coverage and overlapping paired reads.
 Each of these filters can be controlled by command-line arguments.
 The data in this analysis was generated with the following options:
@@ -510,7 +709,7 @@ These were loaded into R as a list of tibbles containing allele count data for A
 
 ```{r}
 files_nowasp <- list.files(
-  file.path(projDir, "analysis-variants/12_aseRC/no_wasp"),
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/12_aseReadCounter/nowasp",
   full.names = TRUE
 )
 samples <- basename(files_nowasp) %>%
@@ -539,7 +738,7 @@ aseRC_nowasp <- lapply(files_nowasp, function(file){
 
 ```{r}
 files_wasp <- list.files(
-  file.path(projDir, "analysis-variants/12_aseRC/wasp"),
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/12_aseReadCounter/wasp",
   full.names = TRUE
 )
 aseRC_wasp <- lapply(files_wasp, function(file){
