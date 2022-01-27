@@ -24,7 +24,8 @@ analysis = RNASeqVariantDiscovery(
 
 rule all:
     input:
-        analysis.outputs
+        analysis.outputs,
+        expand("11_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE=analysis.samples)
 
 include: "smk/modules/refs.smk"
 include: "smk/modules/intervals.smk"
@@ -48,5 +49,6 @@ if analysis.ase:
     include: "smk/modules/ase_setup.smk"
     include: "smk/modules/wasp.smk"
     include: "smk/modules/aseRC.smk"
+    include: "smk/modules/geneiase.smk"
 
 localrules: refs_downloadFa, refs_downloadGtf, refs_downloadKnownVariants  ## Requires internet access but not much compute so run on head node
