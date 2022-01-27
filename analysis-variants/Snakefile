@@ -45,6 +45,7 @@ if analysis.bootstrap_known_variants:
 include: "smk/modules/bqsr.smk"
 include: "smk/modules/variants.smk"
 if analysis.ase:
+    include: "smk/modules/ase_setup.smk"
     include: "smk/modules/wasp.smk"
     include: "smk/modules/aseRC.smk"
 

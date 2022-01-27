@@ -1,22 +1,3 @@
-rule wasp_snvs:
-    input:
-        bams = expand(os.path.join(analysis.bqsr_dir, "bam", "{SAMPLE}.bam"), SAMPLE=analysis.samples),
-    output:
-        snvDir = temp(directory(expand(os.path.join(analysis.wasp_dir, "1_snvs", "{SAMPLE}"), SAMPLE=analysis.samples))),
-    conda:
-        "../envs/wasp.yml"
-    params:
-        proj_root = os.getcwd(),
-        variants_dir = analysis.variants_dir,
-        wasp_dir = analysis.wasp_dir
-    resources:
-        cpu = 1,
-        ntasks = 1,
-        mem_mb = 4000,
-        time = "00-02:00:00",
-    script:
-        "../scripts/wasp_setup.R"
-
 rule wasp_findIntersecting:
     input:
         bam = rules.bqsr_apply.output.bam,
@@ -31,7 +12,7 @@ rule wasp_findIntersecting:
         outDir = temp(directory(os.path.join(analysis.wasp_dir, "2_findIntersecting", "{SAMPLE}"))),
         wasp_scripts = "/hpcfs/users/a1647910/packages/WASP/mapping",
     conda:
-        "../envs/wasp.yml"
+        "../envs/ase.yml"
     resources:
         cpu = 1,
         ntasks = 1,
@@ -62,7 +43,7 @@ rule wasp_remap:
         overhang = analysis.read_length - 1,
         bname = os.path.join(analysis.wasp_dir, "3_remap", "{SAMPLE}"),
     conda:
-        "../envs/wasp.yml"
+        "../envs/ase.yml"
     resources:
         cpu = 16,
         ntasks = 1,
@@ -98,7 +79,7 @@ rule wasp_filterRemapped:
     params:
         wasp_scripts = "/hpcfs/users/a1647910/packages/WASP/mapping",
     conda:
-        "../envs/wasp.yml"
+        "../envs/ase.yml"
     resources:
         cpu = 1,
         ntasks = 1,
@@ -122,7 +103,7 @@ rule wasp_merge:
     params:
         keep_merged = temp(os.path.join(analysis.wasp_dir, "5_merge", "{SAMPLE}.keep.merge.bam")),
     conda:
-        "../envs/wasp.yml"
+        "../envs/ase.yml"
     resources:
         cpu = 1,
         ntasks = 1,

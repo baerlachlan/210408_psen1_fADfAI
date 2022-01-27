@@ -12,3 +12,5 @@ refs/*
 *.fq1.gz
 *.fq2.gz
 .Rproj.user
+*.static.tsv
+*.intervals
