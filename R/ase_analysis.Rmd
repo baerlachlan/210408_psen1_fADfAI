@@ -31,7 +31,7 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 The motivation for performing an allele specific expression (ASE) analysis stems from the idea that selecting for a particular chromosome (i.e. the mutant chromosome) within an experimental group also selects for any expression quantitative trait loci (eQTLs) that exist on that chromosome.
 Therefore exists the possibility of differences in transcript abundances between groups tested for differential expression due to different sets of allelic expression characteristics and separate from the effect of the mutation.
-This would not be a problem in isogenic organisms such as mice, but zebrafish are anything but isogenic.
+This would not be a problem in isogenic organisms such as mice, but zebrafish are not isogenic.
 If the eQTL idea is true, one would expect to see a number of differentially expressed genes on the same chromosome of the mutation, which is indeed the case in this dataset.
 However, if not true, and the observations are caused by the effect of the mutation, an explanation must describe the functional relationship between genes on the same chromosome as the mutation.
 One such possibility is that functionally related genes tend to cluster on chromosomes through evolutionary time because it allows for advantageous allelic combinations to remain together due to the suppressed chance for separation through recombination or chromosomal segregation.
@@ -64,17 +64,24 @@ suppressPackageStartupMessages({
   ## Project specific
   library(statmod)
   library(fgsea)
+  library(VariantAnnotation)
 })
 ```
 
-```{r setup}
+```{r options}
 if (interactive()) setwd(here::here())
 theme_set(theme_bw())
-cores <- availableCores() - 2
+cores <- availableCores() - 1
+```
+
+```{r}
 source("~/bioinformatics/bioToolkit/lbFuncs.R")
-## Select base directory for the project
-projDir <- here()
-# projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv"
+```
+
+```{r}
+## Choose either remote or local project directory
+# projDir <- here()
+projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI"
 ```
 
 ## EnsDb
@@ -174,7 +181,7 @@ Genes were classified as showing allele specific expression (ASE) if they had a 
 
 ```{r aseData}
 files <- list.files(
-  file.path(projDir, "13_geneiase/2_ase"),
+  file.path(projDir, "analysis-variants/13_geneiase/2_ase"),
   full.names = TRUE
 )
 samples <- basename(files) %>%
@@ -214,7 +221,7 @@ nASE <- bind_rows(topASE) %>%
 
 Between `r pander(range(nASE$nASE))` genes were classified as showing ASE across all samples, which accounted for between `r pander(range(percent_format(0.01)(nASE$propASE)))` of the total genes tested.
 
-```{r nAsePlot, fig.height=4, fig.cap="*The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*"}
+```{r nAsePlot, fig.height=4, fig.cap="*The number of genes classified as showing significant ASE based on an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*"}
 nASE %>%
   ggplot(aes(alias, nASE, fill = genotype)) +
   geom_bar(stat = "identity", colour = "black") +
@@ -287,18 +294,60 @@ topDE[[2]] %>%
   )
 ```
 
-For each differentially expressed gene, ASE results were assessed across each sample.
-Due to the requirements for each gene to possess at least one heterozygous single nucleotide variant (SNV) in order to be tested for ASE, not all detected genes were subject to the analysis.
-Furthermore, a substantial number of genes containing het-SNVs were excluded from ASE testing as they did not pass quality control requirements.
-Therefore it is important to distinguish whether a gene was tested and did not show ASE opposed to not being tested at all.
-For each DE gene, samples were assigned to one of three categories: 
+For each significant differentially expressed gene, ASE results were assessed across each sample.
+Each sample contained a different subset of genes available for ASE testing due to conditions that must be met when preparing the data.
+This means that in some samples information about a gene of interest may not be available.
+For a gene to reach the ASE testing stage, it must satisfy each of the following criteria sequentially:
 
-1. Tested and shows ASE
-2. Tested and does not show ASE
-3. Not tested (no detected het-SNVs or filtered by QC)
+1. Have genotypes called within exons by the `GATK` RNA-seq short variant discovery workflow
+2. Pass specific hard filters recommended by the `GATK` for RNA-seq data
+3. Contain at least 1 heterozygous SNV
+4. Pass QC measures for ASE testing
+
+Detailed information about the workflow's QC implementation can be found in the [ASE QC document](ase_qc.html).
 
 ```{r deGenes}
 deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
+```
+
+## Genotypes called
+
+```{r}
+vcf_file <- file.path(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI",
+  "analysis-variants/10_variants/4_extract/all_samples.vcf.gz"
+)
+svp <- ScanVcfParam(info = "", geno = c("GT", "GQ"))
+vcf <- suppressWarnings({
+  readVcf(vcf_file, param = svp)
+})
+samples <- samples(header(vcf))
+```
+
+```{r}
+gr <- rowRanges(vcf)[,c("REF", "ALT")]
+gr$REF <- as.character(gr$REF)
+gr$ALT <- CharacterList(gr$ALT) %>%
+  unstrsplit(sep = ",")
+```
+
+```{r}
+sapply(samples, function(sample){
+  gr$GT <- geno(vcf)$GT[,sample] %>%
+    str_replace(., "\\|", "\\/")  # Not concerned with phasing atm
+  gr$GQ <- geno(vcf)$GQ[,sample]
+  gr <- gr %>%
+    plyranges::filter(!is.na(GQ))  # Remove positions with no genotype call
+  genome(gr) <- genome(exons)  # Ensure same genome to allow findOverlaps()
+  ## Annotate variants with genes
+  hits <- findOverlaps(gr, exons)
+  gr$gene_id <- names(exons[subjectHits(hits)])
+  gr
+}, simplify = FALSE)
+```
+
+```{r}
+overlaps <- findOverlaps(gr, tmp, ignore.strand=TRUE)
 ```
 
 ```{r deAseOverlap}
