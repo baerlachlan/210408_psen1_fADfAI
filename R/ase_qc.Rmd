@@ -65,7 +65,7 @@ source("~/bioinformatics/bioToolkit/lbFuncs.R")
 ```
 
 ```{r}
-## Choose either remote or local project directory
+## Choose either local or remote project directory
 # projDir <- here()
 projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI"
 ```
@@ -378,7 +378,7 @@ The GATK-style format was chosen for its simplicity.
 Defining intervals before calling variants also has the advantage of a large speed-up in computational processing time.
 `HaplotypeCaller` is the longest step in the `GATK` short variant discovery pipeline, sometimes taking over a day to process for large datasets on a HPC system when interval lists are not utilised.
 
-The construction of this interval list was implemented inside the `snakemake` workflow as a custom `R` script ([GitHub link]("https://github.com/baerlachlan/210408_psen1_fADfAI/blob/master/analysis-variants/smk/scripts/intervals.R")).
+The construction of this interval list was implemented inside the `snakemake` workflow as a custom `R` script ([GitHub link](https://github.com/baerlachlan/210408_psen1_fADfAI/blob/master/analysis-variants/smk/scripts/intervals.R)).
 
 ## Variant calling
 
@@ -868,12 +868,12 @@ refRatios_wasp %>%
   ggtitle(label = "Reference allele ratios with WASP filtering")
 ```
 
-`WASP` filtering significantly improved the reference allele mapping bias and therefore `WASP` filtered data was chosen for ASE testing.
+`WASP` filtered data showed a marginally improved reference allele mapping bias and was chosen for ASE testing.
 
 ```{r}
 aseRC <- aseRC_wasp
 refRatios <- refRatios_wasp
-filtProgress <- filtProgress$wasp
+filtStats <- filtProgress$wasp
 ```
 
 ```{r}
@@ -894,7 +894,7 @@ The mean reference ratios for each sample will be used as the null in statistica
 ### Filtering
 
 ```{r, fig.cap="*Boxplots of the total number of SNVs remaining in each sample after various quality control filtering steps. The filters were applied sequentially from left to right across the x-axis.*"}
-filtProgress %>%
+filtStats %>%
   dplyr::select(
     sample, `Within exons` = initial, GATK = GATK,
     `WASP/ASEReadCounter` = software,
@@ -1062,10 +1062,9 @@ staticCounts <- lapply(aseRCByGene, function(x){
 }) %>%
   set_names(samples)
 lapply(seq_along(staticCounts), function(x){
-  path <- paste0(
-    "/hpcfs/users/a1647910/210408_psen1_fADfAI_snv/13_geneiase/1_counts/",
-    names(staticCounts[x]),
-    ".static.tsv"
+  path <- file.path(
+    "/hpcfs/users/a1647910/210408_psen1_fADfAI/analysis-variants/13_geneiase/1_counts",
+    paste0(names(staticCounts[x]), ".static.tsv")
   )
   if (!file.exists(path)) {
     if (!dir.exists(dirname(path))) {
