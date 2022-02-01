@@ -25,7 +25,7 @@ analysis = RNASeqVariantDiscovery(
 rule all:
     input:
         analysis.outputs,
-        expand("11_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE=analysis.samples)
+        expand("13_geneiase/2_ase/{SAMPLE}.static.pval.tsv", SAMPLE=analysis.samples)
 
 include: "smk/modules/refs.smk"
 include: "smk/modules/intervals.smk"

@@ -14,6 +14,7 @@ rule geneiase:
 		"""
 		../../packages/geneiase-1.0.1/bin/geneiase \
 			-t static \
+			-m 1 \
 			-i {input.tsv} \
 			-o {output.tsv}
 		"""
