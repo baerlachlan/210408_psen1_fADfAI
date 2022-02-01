@@ -384,10 +384,6 @@ The construction of this interval list was implemented inside the `snakemake` wo
 
 With the intention to perform downstream ASE analysis, initial variants were restricted to only biallelic SNVs.
 
-```{r}
-
-```
-
 Additionally, for RNA-seq data, the `GATK` recommends [specific hard filters](https://gatk.broadinstitute.org/hc/en-us/articles/360035890471-Hard-filtering-germline-short-variants).
 Variants were removed with the following filters:
 
@@ -1057,7 +1053,7 @@ staticCounts <- lapply(aseRCByGene, function(x){
     rownames_to_column("snvID") %>%
     left_join(altBias[,c("sample", "mean")]) %>%
     dplyr::select(
-      gene, snvID, altCount, refCount, betabinom.p = mean
+      gene, snvID, altCount, refCount, null.betabin.p = mean
     )
 }) %>%
   set_names(samples)

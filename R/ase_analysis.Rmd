@@ -308,6 +308,8 @@ Detailed information about the workflow's QC implementation can be found in the 
 
 ```{r deGenes}
 deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
+de_fAD <- deGenes$fAD$gene_id
+de_fAI <- deGenes$fAI$gene_id
 ```
 
 ## Genotypes called
@@ -329,10 +331,11 @@ gr <- rowRanges(vcf)[,c("REF", "ALT")]
 gr$REF <- as.character(gr$REF)
 gr$ALT <- CharacterList(gr$ALT) %>%
   unstrsplit(sep = ",")
+genome(gr) <- genome(exons)  # Genomes must match for using findOverlaps()
 ```
 
 ```{r}
-sapply(samples, function(sample){
+genes_genotyped <- sapply(samples, function(sample){
   gr$GT <- geno(vcf)$GT[,sample] %>%
     str_replace(., "\\|", "\\/")  # Not concerned with phasing atm
   gr$GQ <- geno(vcf)$GQ[,sample]
@@ -341,15 +344,27 @@ sapply(samples, function(sample){
   genome(gr) <- genome(exons)  # Ensure same genome to allow findOverlaps()
   ## Annotate variants with genes
   hits <- findOverlaps(gr, exons)
-  gr$gene_id <- names(exons[subjectHits(hits)])
-  gr
+  genes <- names(exons[subjectHits(hits)]) %>%
+    unique()
+  genes
 }, simplify = FALSE)
 ```
 
 ```{r}
-overlaps <- findOverlaps(gr, tmp, ignore.strand=TRUE)
+metrics <- sapply(deGenes, function(x){
+  genes <- x$gene_id
+  lapply(seq_along(genes_genotyped), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_genotyped[ind]),
+      genotype_called = genes %in% genes_genotyped[[ind]]
+    )
+  }) %>%
+    bind_rows()
+}, simplify = FALSE)
 ```
 
+<!--
 ```{r deAseOverlap}
 deAseOverlap <- sapply(deGenes, function(x){
   lapply(topASE, function(y){
@@ -363,6 +378,169 @@ deAseOverlap <- sapply(deGenes, function(x){
     pivot_wider(names_from = ASE, values_from = n, values_fill = 0) %>%
     dplyr::select(gene = feat, ASE = `TRUE`, no_ASE = `FALSE`, not_tested = `NA`)
 }, simplify = FALSE)
+```
+-->
+
+## Passed hard filters
+
+```{r}
+vcf_file <- file.path(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI",
+  "analysis-variants/10_variants/6_select/all_samples.vcf.gz"
+)
+svp <- ScanVcfParam(info = "", geno = c("GT", "GQ"))
+vcf <- suppressWarnings({
+  readVcf(vcf_file, param = svp)
+})
+samples <- samples(header(vcf))
+```
+
+```{r}
+gr <- rowRanges(vcf)[,c("REF", "ALT")]
+gr$REF <- as.character(gr$REF)
+gr$ALT <- CharacterList(gr$ALT) %>%
+  unstrsplit(sep = ",")
+genome(gr) <- genome(exons)  # Genomes must match for using findOverlaps()
+```
+
+```{r}
+genes_hardFilter <- sapply(samples, function(sample){
+  gr$GT <- geno(vcf)$GT[,sample] %>%
+    str_replace(., "\\|", "\\/")  # Not concerned with phasing atm
+  gr$GQ <- geno(vcf)$GQ[,sample]
+  gr <- gr %>%
+    plyranges::filter(!is.na(GQ))  # Remove positions with no genotype call
+  genome(gr) <- genome(exons)  # Ensure same genome to allow findOverlaps()
+  ## Annotate variants with genes
+  hits <- findOverlaps(gr, exons)
+  genes <- names(exons[subjectHits(hits)]) %>%
+    unique()
+  genes
+}, simplify = FALSE)
+```
+
+```{r}
+hard_filter <- sapply(deGenes, function(x){
+  genes <- x$gene_id
+  lapply(seq_along(genes_hardFilter), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_hardFilter[ind]),
+      hard_filter = genes %in% genes_hardFilter[[ind]]
+    )
+  }) %>%
+    bind_rows()
+}, simplify = FALSE)
+```
+
+```{r}
+## Update metrics
+metrics <- map2(metrics, hard_filter, function(x, y){left_join(x, y)})
+```
+
+## Heterozygous
+
+```{r}
+## Use the same vcf (as for hard filters) but also filter for heterozygous genotypes
+genes_heterozygous <- sapply(samples, function(sample){
+  gr$GT <- geno(vcf)$GT[,sample] %>%
+    str_replace(., "\\|", "\\/")  # Not concerned with phasing atm
+  gr$GQ <- geno(vcf)$GQ[,sample]
+  gr <- gr %>%
+    plyranges::filter(!is.na(GQ)) %>%  # Remove positions with no genotype call
+    as.data.frame() %>%
+    separate(
+      col = "GT", into = c("allele_1", "allele_2"), sep = "/",
+      remove = FALSE, convert = TRUE, fill = "right"
+    ) %>%
+    dplyr::filter(allele_1 != allele_2) %>%
+    GRanges()
+  genome(gr) <- genome(exons)  # Ensure same genome to allow findOverlaps()
+  ## Annotate variants with genes
+  hits <- findOverlaps(gr, exons)
+  genes <- names(exons[subjectHits(hits)]) %>%
+    unique()
+  genes
+}, simplify = FALSE)
+```
+
+```{r}
+heterozygous <- sapply(deGenes, function(x){
+  genes <- x$gene_id
+  lapply(seq_along(genes_heterozygous), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_heterozygous[ind]),
+      heterozygous = genes %in% genes_heterozygous[[ind]]
+    )
+  }) %>%
+    bind_rows()
+}, simplify = FALSE)
+```
+
+```{r}
+## Update metrics
+metrics <- map2(metrics, heterozygous, function(x, y){left_join(x, y)})
+```
+
+## WASP
+
+```{r}
+## Rds file generated in QC doc
+aseRC <- readRDS(file.path(here(), "files/aseRC.Rds"))
+```
+
+```{r}
+genes_wasp <- lapply(aseRC, function(x){
+  gr <- tibble(
+    seqnames = x$chromosome,
+    start = x$position,
+    end = x$position,
+  ) %>%
+    GRanges()
+  genome(gr) <- genome(exons)
+  hits <- findOverlaps(gr, exons)
+  genes <- names(exons[subjectHits(hits)]) %>%
+    unique()
+  genes
+})
+```
+
+```{r}
+wasp <- sapply(deGenes, function(x){
+  genes <- x$gene_id
+  lapply(seq_along(genes_wasp), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_wasp[ind]),
+      wasp = genes %in% genes_wasp[[ind]]
+    )
+  }) %>%
+    bind_rows()
+}, simplify = FALSE)
+```
+
+```{r}
+## Update metrics
+metrics <- map2(metrics, wasp, function(x, y){left_join(x, y)})
+```
+
+## ASE
+
+```{r}
+lapply(deGenes, function(x){
+  genes <- x$gene_id
+  lapply(topASE, function(y){
+    dplyr::filter(y, feat %in% genes) %>%
+      dplyr::select(gene = feat, sample, p.nom, fdr)
+  }) %>% bind_rows()
+})
+```
+
+## Summary
+
+```{r}
+lapply(metrics, function(x){x %>% group_by(gene) %>% summarise(genotype_called = sum(genotype_called), hard_filter = sum(hard_filter), heterozygous = sum(heterozygous), wasp = sum(wasp)) %>% left_join(chrGenes_df, by = c("gene" = "feat")) %>% dplyr::select(gene, chr, everything())})
 ```
 
 **Alzheimer's DE genes:**
