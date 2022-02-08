@@ -1,0 +1,268 @@
+---
+title: "Variants Analysis"
+subtitle: "210408_psen1_fADfAI dataset"
+author: "Lachlan Baer"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    fig_width: 8
+    fig_height: 6
+    fig_align: "center"
+    code_folding: hide
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  error = FALSE, 
+  fig.align = "center"
+)
+knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
+```
+
+# Setup 
+
+```{r packages}
+suppressPackageStartupMessages({
+  ## Common
+  library(tidyverse)
+  library(magrittr)
+  library(future.apply)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
+  library(VariantAnnotation)
+  library(Gviz)
+})
+```
+
+```{r options}
+if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores <- availableCores() - 1
+```
+
+```{r}
+# source("~/bioinformatics/bioToolkit/lbFuncs.R")
+```
+
+```{r}
+## Choose either local or remote project directory
+# projDir <- here()
+projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI"
+```
+
+```{r}
+options(ucscChromosomeNames = FALSE)
+```
+
+## EnsDb
+
+```{r}
+ah <- AnnotationHub() %>%
+  subset(species == "Danio rerio") %>%
+  subset(rdataclass == "EnsDb")
+ensDb <- ah[["AH83189"]] ## Ens101
+genes <- genes(ensDb, filter = SeqNameFilter(drChrs))
+mcols(genes) <- mcols(genes)[
+  c("gene_id", "gene_name", "gene_biotype", "entrezid")
+]
+exons <- exonsBy(ensDb, by = "gene", filter = SeqNameFilter(drChrs))
+```
+
+An `EnsDb` object for Ensembl release 101 was accessed and gene and exon annotation information was extracted.
+
+## Metadata
+
+```{r}
+metadata <- read_csv(file.path(projDir, "files/samples.csv")) %>%
+  dplyr::select(-sample) %>%
+  mutate(
+    Genotype = factor(Genotype, levels = unique(Genotype)),
+    basename = factor(basename, levels = basename),
+    alias = c(
+      paste0(rep("fAD", 7), seq(1, 7)),
+      paste0(rep("fAI", 8), seq(1, 8)),
+      paste0(rep("wt", 9), seq(1, 9))
+    )
+  ) %>%
+  dplyr::select(sample = basename, fish_id, batch_killed, sex = Sex, RINe,
+                genotype = Genotype, genotype_2 = Genotype_2, alias)
+metadata %>%
+  dplyr::select(
+    Sample = sample, Genotype = genotype, Alias = alias, Gender = sex,
+    `Fish ID` = fish_id, `Batch Killed` = batch_killed
+  ) %>%
+  kable(
+    align = "l",
+    caption = "Sample metadata"
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+genoCols <- metadata$genotype %>%
+  levels() %>%
+  length() %>%
+  brewer.pal("Set1") %>%
+  setNames(levels(metadata$genotype))
+compCols <- genoCols[1:2]
+```
+
+```{r}
+samples_byGeno <- metadata %>%
+  split(f = .$genotype) %>%
+  sapply(function(x){
+    pull(x, sample) %>%
+      droplevels()
+  }, simplify = FALSE)
+alz_samples <- metadata[metadata$genotype == "EOfAD-like/+",]$sample %>%
+  droplevels()
+acne_samples <- metadata[metadata$genotype == "fAI-like/+",]$sample %>%
+  droplevels()
+wt_samples <- metadata[metadata$genotype == "WT",]$sample %>%
+  droplevels()
+```
+
+```{r}
+drChrs <- seq(1:25)
+```
+
+# Variants
+
+```{r}
+vcf_file <- file.path(
+  "/hpcfs/users/a1647910/210408_psen1_fADfAI",
+  "analysis-variants/10_variants/6_select/all_samples.vcf.gz"
+)
+svp <- ScanVcfParam(info = "", geno = c("GT", "GQ"))
+vcf <- suppressWarnings({
+  readVcf(vcf_file, param = svp)
+})
+```
+
+```{r}
+gr <- rowRanges(vcf)
+mcols(gr) <- NULL
+unphase_GTs <- function(x){
+  str_replace(x, "\\|", "\\/")
+}
+gt <- geno(vcf)$GT %>%
+  as.data.frame() %>%
+  mutate(across(everything(), unphase_GTs))
+```
+
+```{r}
+gt_similarity <- lapply(samples_byGeno, function(samples){
+  gt_summary <- apply(gt[,samples], 1, function(x){
+    ## Sort the vector so that the "./." (no-call) genotype is always last
+    ## which.max() will therefore always return a called genotype if tied with a no-call
+    tab <- table(x) %>%
+      .[rev(sort(names(.)))]
+    gt_max <- names(which.max(tab))
+    n_max <- sum(x == gt_max)
+    n_called <- sum(x != "./.")
+    n_nocall <- sum(x == "./.")
+    tibble(
+      gt_max = gt_max,
+      n_max = n_max,
+      n_called = n_called,
+      n_nocall = n_nocall
+    )
+  }) %>%
+    bind_rows()
+  mcols(gr) <- gt_summary
+  gr %>%
+    plyranges::filter(gt_max != "./.") %>%  # Because of the above sort, this won't remove rows where n_nocall == most called genotype
+    plyranges::mutate(
+      percent = n_max / n_called,
+      cumsum = cumsum(percent),
+      lag = dplyr::lag(cumsum, n = 50, default = NA),
+      lead = dplyr::lead(cumsum, n = 50, default = NA),
+      window_sum = lead - lag,
+      window_ave = window_sum / 101
+    )
+})
+```
+
+```{r}
+lapply(seq_along(gt_similarity), function(ind){
+  overlaps <- findOverlaps(gt_similarity[[ind]], gr)
+  colname <- names(gt_similarity[ind])
+  mcols(gr)[,colname] <<- NA
+  mcols(gr)[subjectHits(overlaps), colname] <<-
+    mcols(gt_similarity[[ind]])[queryHits(overlaps), "window_ave"]
+})
+```
+
+# DE data
+
+```{r deData}
+topDE <- readRDS(file.path(projDir, "files/topTables.Rds")) %>%
+  set_names(c("fAD", "fAI"))
+```
+
+```{r deGenes}
+deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
+de_fAD <- deGenes$fAD$gene_id
+de_fAI <- deGenes$fAI$gene_id
+```
+
+# Plot
+
+```{r}
+tmp
+```
+
+```{r}
+axis_track <- GenomeAxisTrack()
+gene_track <- genes[de_fAI] %>%
+  plyranges::filter(seqnames == "17") %>%
+  AnnotationTrack()
+mutant_track <- gt_similarity$`fAI-like/+`[,"window_ave"] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(type = "a", name = "mutant", window = -1, windowSize = 1)
+wt_track <- gt_similarity$WT[,"window_ave"] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(type = "a", name = "wildtype", window = -1, windowSize = 1)
+rbind(gt_similarity$`fAI-like/+`[,"window_ave"], gt_similarity$WT[,"window_ave"]) %>%
+  DataTrack()
+plotTracks(list(axis_track, gene_track, mutant_track, wt_track))
+plotTracks(list(axis_track, gene_track, mutant_track, wt_track), from = 51206225 - 1e6, to = 51224800 + 1e6)
+region_track <- exons %>%
+  unlist() %>%
+  # GenomicRanges::reduce() %>%
+  plyranges::filter(seqnames == "17") %>%
+  GeneRegionTrack()
+```
+
+```{r}
+axis_track <- GenomeAxisTrack()
+gene_track <- genes[de_fAI] %>%
+  plyranges::filter(seqnames == "17") %>%
+  AnnotationTrack()
+mutant_track <- gr %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(type = "a", name = "mutant", window = -1, windowSize = 1, groups = c("EOfAD-like/+", "fAI-like/+", "WT"))
+wt_track <- gt_similarity$WT[,"window_ave"] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(type = "a", name = "wildtype", window = -1, windowSize = 1)
+plotTracks(list(axis_track, gene_track, mutant_track, wt_track))
+```
+

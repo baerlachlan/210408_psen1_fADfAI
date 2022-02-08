@@ -352,13 +352,18 @@ genes_genotyped <- sapply(samples, function(sample){
 
 ```{r}
 metrics <- sapply(deGenes, function(x){
-  genes <- x$gene_id
+  gene_id <- x$gene_id
   lapply(seq_along(genes_genotyped), function(ind){
     tibble(
-      gene = genes,
-      sample = names(genes_genotyped[ind]),
-      genotype_called = genes %in% genes_genotyped[[ind]]
-    )
+      gene = gene_id,
+      sample = names(genes_genotyped[ind])
+    ) %>%
+      left_join(
+        as.data.frame(mcols(genes)[,c("gene_name", "gene_id")]),
+        by = c("gene" = "gene_id")
+      ) %>%
+      left_join(metadata[,c("sample", "genotype")]) %>%
+      mutate(genotype_called = gene_id %in% genes_genotyped[[ind]])
   }) %>%
     bind_rows()
 }, simplify = FALSE)
@@ -367,16 +372,16 @@ metrics <- sapply(deGenes, function(x){
 <!--
 ```{r deAseOverlap}
 deAseOverlap <- sapply(deGenes, function(x){
-  lapply(topASE, function(y){
-    dplyr::select(x, feat = gene_id, symbol = gene_name, chromosome) %>%
-      left_join(y[,c("feat", "sample", "genotype", "ASE")])
-  }) %>%
-    bind_rows() %>%
-    group_by(feat, ASE) %>%
-    tally() %>%
-    ungroup() %>%
-    pivot_wider(names_from = ASE, values_from = n, values_fill = 0) %>%
-    dplyr::select(gene = feat, ASE = `TRUE`, no_ASE = `FALSE`, not_tested = `NA`)
+lapply(topASE, function(y){
+dplyr::select(x, feat = gene_id, symbol = gene_name, chromosome) %>%
+left_join(y[,c("feat", "sample", "genotype", "ASE")])
+}) %>%
+bind_rows() %>%
+group_by(feat, ASE) %>%
+tally() %>%
+ungroup() %>%
+pivot_wider(names_from = ASE, values_from = n, values_fill = 0) %>%
+dplyr::select(gene = feat, ASE = `TRUE`, no_ASE = `FALSE`, not_tested = `NA`)
 }, simplify = FALSE)
 ```
 -->
@@ -528,19 +533,74 @@ metrics <- map2(metrics, wasp, function(x, y){left_join(x, y)})
 ## ASE
 
 ```{r}
-lapply(deGenes, function(x){
+geneiase <- lapply(deGenes, function(x){
   genes <- x$gene_id
   lapply(topASE, function(y){
     dplyr::filter(y, feat %in% genes) %>%
-      dplyr::select(gene = feat, sample, p.nom, fdr)
+      dplyr::select(gene = feat, sample, n.vars, p.nom, fdr, sig)
   }) %>% bind_rows()
 })
+```
+
+```{r}
+## Update metrics
+metrics <- map2(metrics, geneiase, function(x, y){left_join(x, y)})
 ```
 
 ## Summary
 
 ```{r}
-lapply(metrics, function(x){x %>% group_by(gene) %>% summarise(genotype_called = sum(genotype_called), hard_filter = sum(hard_filter), heterozygous = sum(heterozygous), wasp = sum(wasp)) %>% left_join(chrGenes_df, by = c("gene" = "feat")) %>% dplyr::select(gene, chr, everything())})
+lapply(metrics, function(x){
+  x %>%
+    group_by(gene) %>%
+    summarise(
+      genotype_called = sum(genotype_called),
+      hard_filter = sum(hard_filter),
+      heterozygous = sum(heterozygous),
+      wasp = sum(wasp)
+    ) %>%
+    left_join(chrGenes_df, by = c("gene" = "feat")) %>%
+    dplyr::select(gene, chr, everything())
+})
+```
+
+```{r}
+metrics$fAD %>%
+  left_join(metadata[,c("sample", "genotype")]) %>%
+  dplyr::filter(genotype != "fAI-like/+") %>%
+  group_by(gene, genotype) %>%
+  summarise(
+    genotype_called = sum(genotype_called),
+    hard_filter = sum(hard_filter),
+    heterozygous = sum(heterozygous),
+    wasp = sum(wasp)
+  ) %>%
+  pivot_longer(
+    cols = c("genotype_called", "hard_filter", "heterozygous", "wasp"),
+    names_to = "step",
+    values_to = "count"
+  ) %>%
+  ungroup() %>%
+  left_join(
+    as.data.frame(mcols(genes)[,c("gene_name", "gene_id")]),
+    by = c("gene" = "gene_id")
+  ) %>%
+  dplyr::mutate(gene_name = factor(gene_name, levels = deGenes$fAD$gene_name)) %>%
+  ggplot(aes(fill = genotype, x = step, y = count)) +
+  geom_bar(position = "dodge", stat = "identity") +
+  scale_y_continuous(breaks = seq(1, 10)) +
+  scale_fill_manual(values = genoCols) +
+  facet_wrap(~gene_name, nrow = 2)
+```
+
+```{r}
+## ASE is shown in the top DE gene for fAD comparison
+metrics$fAD %>% dplyr::filter(gene_name == "col12a1a") %>% dplyr::arrange(genotype) %>% print(n=Inf)
+```
+
+```{r}
+metrics$fAD %>%
+  mutate
 ```
 
 **Alzheimer's DE genes:**
