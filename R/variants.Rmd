@@ -227,42 +227,72 @@ de_fAI <- deGenes$fAI$gene_id
 # Plot
 
 ```{r}
-tmp
+axis_track <- GenomeAxisTrack()
+```
+
+```{r}
+aTrack_alz <- genes[de_fAD] %>%
+  plyranges::filter(seqnames == "17") %>%
+  GeneRegionTrack(
+    name = "Alz DE",
+    transcriptAnnotation = "symbol",
+    fontcolor.group = 1,
+    cex.group = 0.5,
+    rotation.group = c(35, 35, 35, 0, 0)
+  )
+dTrack_alz <- gr[,c("EOfAD-like/+", "WT")] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(
+    type = "l",
+    name = "Alzheimer's comparison",
+    window = -1,
+    windowSize = 1,
+    groups = c("EOfAD-like/+","WT"),
+    col = genoCols[c("EOfAD-like/+", "WT")],
+    baseline = c(0.5, 1)
+  )
+aTrack_acne <- genes[de_fAI] %>%
+  plyranges::filter(seqnames == "17") %>%
+  GeneRegionTrack(
+    name = "Acne DE",
+    transcriptAnnotation = "symbol",
+    fontcolor.group = 1,
+    cex.group = 0.5
+  )
+dTrack_acne <- gr[,c("fAI-like/+", "WT")] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(
+    type = "l",
+    name = "Acne Inversa Comparison",
+    window = -1,
+    windowSize = 1,
+    groups = c("fAI-like/+","WT"),
+    col = genoCols[c("fAI-like/+", "WT")]
+    )
+plotTracks(list(axis_track, aTrack_alz, dTrack_alz, aTrack_acne, dTrack_acne))
 ```
 
 ```{r}
 axis_track <- GenomeAxisTrack()
-gene_track <- genes[de_fAI] %>%
-  plyranges::filter(seqnames == "17") %>%
-  AnnotationTrack()
-mutant_track <- gt_similarity$`fAI-like/+`[,"window_ave"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(type = "a", name = "mutant", window = -1, windowSize = 1)
-wt_track <- gt_similarity$WT[,"window_ave"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(type = "a", name = "wildtype", window = -1, windowSize = 1)
-rbind(gt_similarity$`fAI-like/+`[,"window_ave"], gt_similarity$WT[,"window_ave"]) %>%
-  DataTrack()
-plotTracks(list(axis_track, gene_track, mutant_track, wt_track))
-plotTracks(list(axis_track, gene_track, mutant_track, wt_track), from = 51206225 - 1e6, to = 51224800 + 1e6)
-region_track <- exons %>%
-  unlist() %>%
-  # GenomicRanges::reduce() %>%
-  plyranges::filter(seqnames == "17") %>%
-  GeneRegionTrack()
-```
-
-```{r}
-axis_track <- GenomeAxisTrack()
-gene_track <- genes[de_fAI] %>%
-  plyranges::filter(seqnames == "17") %>%
-  AnnotationTrack()
-mutant_track <- gr %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(type = "a", name = "mutant", window = -1, windowSize = 1, groups = c("EOfAD-like/+", "fAI-like/+", "WT"))
-wt_track <- gt_similarity$WT[,"window_ave"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(type = "a", name = "wildtype", window = -1, windowSize = 1)
-plotTracks(list(axis_track, gene_track, mutant_track, wt_track))
+aTrack_alz <- genes[de_fAD] %>%
+  plyranges::filter(seqnames == "6") %>%
+  GeneRegionTrack(
+    name = "Alz DE",
+    transcriptAnnotation = "symbol",
+    fontcolor.group = 1,
+    cex.group = 0.5,
+    rotation.group = c(35, 35, 35, 0, 0)
+  )
+dTrack_alz <- gr[,c("EOfAD-like/+", "WT")] %>%
+  plyranges::filter(seqnames == "6") %>%
+  DataTrack(
+    type = "l",
+    name = "Alzheimer's comparison",
+    window = -1,
+    windowSize = 1,
+    groups = c("EOfAD-like/+","WT"),
+    col = genoCols[c("EOfAD-like/+", "WT")]
+  )
+plotTracks(list(axis_track, aTrack_alz, dTrack_alz))
 ```
 
