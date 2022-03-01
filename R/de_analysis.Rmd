@@ -245,7 +245,7 @@ design <- model.matrix(~genotype, data = dgeList$samples) %>%
 
 ```{r, fig.height=6, fig.width=6, fig.cap = "*Visualisation of the design matrix*"}
 pheatmap(
-  design, 
+  design[metadata$sample,], 
   cluster_cols = FALSE, 
   cluster_rows = FALSE, 
   color = c("white", "grey50"),
@@ -411,25 +411,25 @@ Both GC content and length were noted as being of concern and were therefore use
 The resulting `glm.offset` values from the output of `cqn` were added to the original `DGEList` object.
 
 ```{r, results='hide'}
-# cqn <- cqn(
-#   counts = dgeList$counts,
-#   x = dgeList$genes$gc_content,
-#   lengths = rep(1000, times = nrow(dgeList)),
-#   sizeFactors = dgeList$samples$lib.size,
-#   lengthMethod = "fixed"
-# )
 cqn <- cqn(
   counts = dgeList$counts,
   x = dgeList$genes$gc_content,
-  lengths = dgeList$genes$length,
-  sizeFactors = dgeList$samples$lib.size
+  lengths = rep(1000, times = nrow(dgeList)),
+  sizeFactors = dgeList$samples$lib.size,
+  lengthMethod = "fixed"
 )
+# cqn <- cqn(
+#   counts = dgeList$counts,
+#   x = dgeList$genes$gc_content,
+#   lengths = dgeList$genes$length,
+#   sizeFactors = dgeList$samples$lib.size
+# )
 ```
 
 ```{r, fig.cap="*Model fits for GC content and gene length under the CQN model. *"}
 par(mfrow = c(1, 2))
 cqnplot(cqn, n = 1, xlab = "GC Content", col = genoCols)
-cqnplot(cqn, n = 2, xlab = "Length", col = genoCols)
+# cqnplot(cqn, n = 2, xlab = "Length", col = genoCols)
 legend(
   "bottomright",
   legend = levels(metadata$genotype),
@@ -617,10 +617,10 @@ topTables_cqn %>%
 
 # Results
 
-Conditional quantile normalised data was **not** chosen for this analysis as it did not improve gene GC and length biases.
+Conditional quantile normalised data using gene GC content, but not gene length, was chosen for this analysis as it improved gene GC and length biases the most.
 
 ```{r, fig.cap="*Volcano plots showing -log10(p) against logFC. Genes determined to be DE are coloured red.*"}
-topTables %>%
+topTables_cqn %>%
   bind_rows() %>%
   ggplot(aes(logFC, -log10(PValue), colour = DE)) +
   geom_point(alpha = 0.4) +
@@ -658,7 +658,7 @@ faiComp <- metadata %>%
 ```
 
 ```{r}
-deGenes <- lapply(topTables, function(x){
+deGenes <- lapply(topTables_cqn, function(x){
   dplyr::filter(x, DE) %>%
     pull(gene_id)
 })
@@ -691,7 +691,7 @@ deCpmPlots <- lapply(seq_along(deGenes), function(x){
       facet_wrap(
         ~gene_id,
         labeller = geneLabeller,
-        nrow = 2
+        ncol = 4
       ) +
       theme(
         legend.position = "none",
@@ -705,10 +705,10 @@ deCpmPlots <- lapply(seq_along(deGenes), function(x){
 
 A set of `r length(deGenes[[1]])` were classified as DE due to the EOfAD-like/+ genotype.
 The highest ranked genes by p-value are shown in the following table.
-Interestingly, `r nrow(dplyr::filter(topTables[[1]], DE, chromosome == 17))` of these genes were located on chromosome 17, the same chromosome as the mutation.
+Interestingly, `r nrow(dplyr::filter(topTables_cqn[[1]], DE, chromosome == 17))` of these genes were located on chromosome 17, the same chromosome as the mutation.
 
 ```{r}
-topTables$`EOfAD-like/+` %>%
+topTables_cqn$`EOfAD-like/+` %>%
   dplyr::slice(1:1000) %>%
   dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
   mutate(
@@ -749,20 +749,14 @@ cpm[deGenes$`EOfAD-like/+`,] %>%
 deCpmPlots[[1]]
 ```
 
-### Chromosomal effect
-
-```{r}
-
-```
-
 ## fAI-like mutation
 
 A set of `r length(deGenes[[2]])` were classified as DE due to the fAI-like/+ genotype.
 The highest ranked genes by p-value are shown in the following table.
-The location of DE genes followed a similar trend to the Alzheimer's mutant with `r nrow(dplyr::filter(topTables[[2]], DE, chromosome == 17))` genes located on chromosome 17.
+The location of DE genes followed a similar trend to the Alzheimer's mutant with `r nrow(dplyr::filter(topTables_cqn[[2]], DE, chromosome == 17))` genes located on chromosome 17.
 
 ```{r}
-topTables$`fAI-like/+` %>%
+topTables_cqn$`fAI-like/+` %>%
   dplyr::slice(1:1000) %>%
   dplyr::select(gene_id, gene_name, chromosome, logFC, logCPM, PValue, FDR, bonfP, DE) %>%
   mutate(
@@ -799,7 +793,7 @@ cpm[deGenes$`fAI-like/+`,] %>%
   )
 ```
 
-```{r, fig.height=4, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
+```{r, fig.height=6, fig.cap="*logCPM boxplots between comparative groups for genes classified as DE.*"}
 deCpmPlots[[2]]
 ```
 

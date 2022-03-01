@@ -53,6 +53,7 @@ suppressPackageStartupMessages({
   library(DT)
   library(htmltools)
   library(msigdbr)
+  library(goseq)
 })
 ```
 
@@ -99,11 +100,10 @@ geneGc <- transcripts %>%
 ```
 
 ```{r}
-genes <- genes(ensDb)
-mcols(genes) <- mcols(genes)[
-  c("gene_id", "gene_name", "gene_biotype", "entrezid")
-] %>%
-  as.data.frame() %>%
+genes <- genes(ensDb) %>%
+  .[,c("gene_id", "gene_name", "gene_biotype", "entrezid")] %>%
+  as_tibble() %>%
+  mutate(entrezid = lapply(entrezid, function(x){x})) %>%
   left_join(geneGc)
 ```
 
@@ -131,7 +131,7 @@ geneChrs <- as.data.frame(genes) %>%
 metadata <- read_csv(here("files/samples.csv")) %>%
   dplyr::select(-sample) %>%
   dplyr::rename(sample = basename, genotype = Genotype) %>%
-  ## We need some sample aliases that follow R naming conventions
+  ## We need some syntactic sample aliases
   mutate(
     alias = c(
       paste0(rep("fAD", 7), seq(1, 7)),
@@ -157,16 +157,14 @@ topTables <- readRDS(here("files/topTables_cqn.Rds")) %>%
 ```
 
 Genes from both genotype comparisons in the [previous DE analysis](`r here("docs/de_analysis.html")`) were loaded as a list of `topTable` objects.
-The names of the list elements were changed from those used in the previous DE analysis, such that they now follow `R` naming conventions and hence allow for more intuitive code.
+The list names were changed from those used in the previous DE analysis, such that they now comply with `R`'s syntactic naming conventions.
 
-Only small sets of DE genes were identified due to the presence of an EOfAD-like or fAI-like mutation, which showed `r nrow(dplyr::filter(topTables$EOfAD, DE))` and `r nrow(dplyr::filter(topTables$fAI, DE))` DE genes respectively.
+Only small numbers of DE genes were identified due to the presence of either an EOfAD-like or fAI-like mutation, which showed `r nrow(dplyr::filter(topTables$EOfAD, DE))` and `r nrow(dplyr::filter(topTables$fAI, DE))` DE genes respectively.
 
-# Enrichment testing
+# Ranks
 
-Small numbers of DE genes present challenges as they don't often reach the required statistical power for enrichment methods that use only discrete sets of genes classified as DE.
-However, there are other alternative methods that utilise the complete set of detectable genes in the form of a ranked list.
-
-## Ranks
+Small amounts of DE genes present challenges as they don't often reach the required statistical power for enrichment methods that use discrete sets of genes satisfying a DE threshold.
+However, there also exists methods that utilise the complete set of detectable genes in the form of a ranked list.
 
 Two approaches were considered for forming a ranked list of genes.
 The first involved taking each gene's sign of logFC and multiplying by its corresponding -log10(p-value) of differential expression.
@@ -195,7 +193,7 @@ ranks_nd <- lapply(topTables, function(x){
 })
 ```
 
-## Gene sets
+# Gene sets
 
 Multiple gene set databases were accessed with the `msigdbr` package.
 For this analysis the Hallmark, KEGG, Wikipathways, GO and chromosomal based gene sets were chosen.
@@ -216,7 +214,7 @@ hmByID <- hm %>%
 - The Hallmark gene sets consists of `r length(hmByID)` gene sets ranging from sizes of `r min(sapply(hmByID, length))` to `r max(sapply(hmByID, length))` genes.
 
 ```{r}
-kg <- msigdbr("Danio rerio", category = "C2", subcategory = "CP:KEGG") %>% 
+kg <- msigdbr("Danio rerio", category = "C2", subcategory = "CP:KEGG") %>%
   left_join(entrezGenes) %>%
   dplyr::filter(!is.na(gene_id)) %>%
   distinct(gs_name, gene_id, .keep_all = TRUE)
@@ -246,20 +244,6 @@ wkByID <- wk %>%
 - The Wikipathways gene sets consists of `r length(wkByID)` gene sets ranging from sizes of `r min(sapply(wkByID, length))` to `r max(sapply(wkByID, length))` genes.
 
 ```{r}
-chr <- as_tibble(genes)
-chrByGene <- chr %>%
-  split(f = .$gene_id) %>%
-  lapply(extract2, "seqnames")
-chrByID <- chr %>%
-  dplyr::filter(seqnames %in% seq(1:25)) %>%
-  droplevels() %>%
-  split(f = .$seqnames) %>%
-  lapply(extract2, "gene_id")
-```
-
-- The chromosomal gene sets consists of `r length(chrByID)` gene sets (chromosomes) ranging from sizes of `r min(sapply(chrByID, length))` to `r max(sapply(chrByID, length))` genes.
-
-```{r}
 goSummaries <- url("https://uofabioinformaticshub.github.io/summaries2GO/data/goSummaries.RDS") %>%
   readRDS() %>%
   mutate(
@@ -283,21 +267,221 @@ goByID <- go %>%
 ```
 
 - The GO gene sets consists of `r length(goByID)` gene sets ranging from sizes of `r min(sapply(goByID, length))` to `r max(sapply(goByID, length))` genes.
-    - GO gene sets were restricted to those with 3 or more steps back to the ontology root terms.
+  - GO gene sets were restricted to those with 3 or more steps back to the ontology root terms.
 
-## Chromosomal enrichment
+```{r}
+chr <- as_tibble(genes)
+chrByGene <- chr %>%
+  split(f = .$gene_id) %>%
+  lapply(extract2, "seqnames")
+chrByID <- chr %>%
+  dplyr::filter(seqnames %in% seq(1:25)) %>%
+  droplevels() %>%
+  split(f = .$seqnames) %>%
+  lapply(extract2, "gene_id")
+```
 
-It was noted previously that a large proprtion of DE genes were located on the same chromosome as the mutation.
-It was therefore posited that the compensatory genetic responses triggered by a mutation may originate from genes nearby the disrupted gene.
-If this is true, genes involved in similar functional pathways may be located within a close genetic distance.
-This would make sense from an evolutionary point of view because it would allow advantageous allelic combinations to remain together due to their low chance for recombination.
+- The chromosomal gene sets consists of `r length(chrByID)` gene sets (chromosomes) ranging from sizes of `r min(sapply(chrByID, length))` to `r max(sapply(chrByID, length))` genes.
 
-To test this idea, the leading edge genes from significantly enriched pathways were tested for enrichment of localisation on chromosome 17, the same chromosome as *psen1*.
-To test this idea, enrichment testing was performed t.
+# Enrichment testing
 
-### Directional GSEA
+Gene Set Enrichment Analyses were performed on both ranked lists for each of the gene sets described above.
+Significantly enriched gene sets are reported below.
+
+## Directional GSEA
 
 The following Gene Set Enrichment Analyses were performed taking directionality into account.
+
+### Hallmark
+
+```{r}
+gsea_d_hm <- lapply(ranks_d, function(x){
+  fgseaMultilevel(hmByID, x, eps = 0) %>%
+    as_tibble() %>%
+    dplyr::rename(FDR = padj) %>%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, "bonferroni"),
+      DE = padj < 0.05
+    ) %>%
+    dplyr::arrange(pval)
+})
+```
+
+```{r}
+gsea_d_hm$EOfAD %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "HALLMARK_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched Hallmark pathways for the EOfAD comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+gsea_d_hm$fAI %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "HALLMARK_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched Hallmark pathways for the fAI comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+### KEGG
+
+```{r}
+gsea_d_kg <- lapply(ranks_d, function(x){
+  fgseaMultilevel(kgByID, x, eps = 0) %>%
+    as_tibble() %>%
+    dplyr::rename(FDR = padj) %>%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, "bonferroni"),
+      DE = padj < 0.05
+    ) %>%
+    dplyr::arrange(pval)
+})
+```
+
+```{r}
+gsea_d_kg$EOfAD %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "KEGG_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched KEGG pathways for the EOfAD comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+gsea_d_kg$fAI %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "KEGG_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched KEGG pathways for the fAI comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+### Wikipathways
+
+```{r}
+gsea_d_wk <- lapply(ranks_d, function(x){
+  fgseaMultilevel(wkByID, x, eps = 0) %>%
+    as_tibble() %>%
+    dplyr::rename(FDR = padj) %>%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, "bonferroni"),
+      DE = padj < 0.05
+    ) %>%
+    dplyr::arrange(pval)
+})
+```
+
+```{r}
+gsea_d_wk$EOfAD %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "WP_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched Wikipathways pathways for the EOfAD comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+gsea_d_wk$fAI %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "WP_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched Wikipathways pathways for the fAI comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+### Chromosomal
 
 ```{r}
 gsea_d_chr <- lapply(ranks_d, function(x){
@@ -317,6 +501,73 @@ gsea_d_chr <- lapply(ranks_d, function(x){
 gsea_d_chr$EOfAD %>%
   dplyr::filter(DE) %>%
   mutate(
+    Pathway = pathway,
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched chromosomal pathways for the EOfAD comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+gsea_d_chr$fAI %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = pathway,
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched chromosomal pathways for the fAI comparison",
+      "using directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+## Non-directional GSEA
+
+Similarly to the directional Gene Set Enrichment Analyses, testing was performed on the non-directional ranked list.
+
+### Hallmark
+
+```{r}
+gsea_nd_hm <- lapply(ranks_nd, function(x){
+  fgseaMultilevel(hmByID, x, eps = 0, scoreType = "pos") %>%
+    as_tibble() %>%
+    dplyr::rename(FDR = padj) %>%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, "bonferroni"),
+      DE = padj < 0.05
+    ) %>%
+    dplyr::arrange(pval)
+})
+```
+
+```{r}
+gsea_nd_hm$EOfAD %>%
+  dplyr::filter(DE) %>%
+  mutate(
     Pathway = str_remove(pathway, "HALLMARK_"),
     Pathway = strtrim(Pathway, 45),
     Direction = ifelse(sign(NES) == 1, "Up", "Down"),
@@ -330,13 +581,13 @@ gsea_d_chr$EOfAD %>%
     align = "l",
     caption = paste(
       "The", nrow(.), "enriched Hallmark pathways for the EOfAD comparison",
-      "using directional rankings and a threshold of FDR < 0.05."
+      "using non-directional rankings and a threshold of FDR < 0.05."
     )
   ) %>%
   kable_styling(
     bootstrap_options = c("striped", "hover", "condensed", "responsive")
   )
-gsea_d_chr$fAI %>%
+gsea_nd_hm$fAI %>%
   dplyr::filter(DE) %>%
   mutate(
     Pathway = str_remove(pathway, "HALLMARK_"),
@@ -352,7 +603,7 @@ gsea_d_chr$fAI %>%
     align = "l",
     caption = paste(
       "The", nrow(.), "enriched Hallmark pathways for the fAI comparison",
-      "using directional rankings and a threshold of FDR < 0.05."
+      "using non-directional rankings and a threshold of FDR < 0.05."
     )
   ) %>%
   kable_styling(
@@ -360,9 +611,133 @@ gsea_d_chr$fAI %>%
   )
 ```
 
-### Non-directional GSEA
+### KEGG
 
-Similarly to the directional Gene Set Enrichment Analyses, testing was performed on the non-directional ranked list.
+```{r}
+gsea_nd_kg <- lapply(ranks_nd, function(x){
+  fgseaMultilevel(kgByID, x, eps = 0, scoreType = "pos") %>%
+    as_tibble() %>%
+    dplyr::rename(FDR = padj) %>%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, "bonferroni"),
+      DE = padj < 0.05
+    ) %>%
+    dplyr::arrange(pval)
+})
+```
+
+```{r}
+gsea_nd_kg$EOfAD %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "KEGG_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched KEGG pathways for the EOfAD comparison",
+      "using non-directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+gsea_nd_kg$fAI %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "KEGG_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched KEGG pathways for the fAI comparison",
+      "using non-directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+### Wikipathways
+
+```{r}
+gsea_nd_wk <- lapply(ranks_nd, function(x){
+  fgseaMultilevel(wkByID, x, eps = 0, scoreType = "pos") %>%
+    as_tibble() %>%
+    dplyr::rename(FDR = padj) %>%
+    mutate(
+      edgeSize = vapply(leadingEdge, length, numeric(1)),
+      padj = p.adjust(pval, "bonferroni"),
+      DE = padj < 0.05
+    ) %>%
+    dplyr::arrange(pval)
+})
+```
+
+```{r}
+gsea_nd_wk$EOfAD %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "WP_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched Wikipathways pathways for the EOfAD comparison",
+      "using non-directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+gsea_nd_wk$fAI %>%
+  dplyr::filter(DE) %>%
+  mutate(
+    Pathway = str_remove(pathway, "WP_"),
+    Pathway = strtrim(Pathway, 45),
+    Direction = ifelse(sign(NES) == 1, "Up", "Down"),
+    PValue = formatC(pval, digits = 2, format = "e"),
+    FDR = formatC(padj, digits = 2, format = "e"),
+  ) %>%
+  dplyr::select(
+    Pathway, Size = size, `Edge size` = edgeSize, PValue, FDR
+  ) %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The", nrow(.), "enriched Wikipathways pathways for the fAI comparison",
+      "using non-directional rankings and a threshold of FDR < 0.05."
+    )
+  ) %>%
+  kable_styling(
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
+### Chromosomal
 
 ```{r}
 gsea_nd_chr <- lapply(ranks_nd, function(x){
@@ -382,7 +757,7 @@ gsea_nd_chr <- lapply(ranks_nd, function(x){
 gsea_nd_chr$EOfAD %>%
   dplyr::filter(DE) %>%
   mutate(
-    Pathway = str_remove(pathway, "HALLMARK_"),
+    Pathway = pathway,
     Pathway = strtrim(Pathway, 45),
     Direction = ifelse(sign(NES) == 1, "Up", "Down"),
     PValue = formatC(pval, digits = 2, format = "e"),
@@ -394,7 +769,7 @@ gsea_nd_chr$EOfAD %>%
   kable(
     align = "l",
     caption = paste(
-      "The", nrow(.), "enriched Hallmark pathways for the EOfAD comparison",
+      "The", nrow(.), "enriched chromosomal pathways for the EOfAD comparison",
       "using non-directional rankings and a threshold of FDR < 0.05."
     )
   ) %>%
@@ -404,7 +779,7 @@ gsea_nd_chr$EOfAD %>%
 gsea_nd_chr$fAI %>%
   dplyr::filter(DE) %>%
   mutate(
-    Pathway = str_remove(pathway, "HALLMARK_"),
+    Pathway = pathway,
     Pathway = strtrim(Pathway, 45),
     Direction = ifelse(sign(NES) == 1, "Up", "Down"),
     PValue = formatC(pval, digits = 2, format = "e"),
@@ -416,7 +791,7 @@ gsea_nd_chr$fAI %>%
   kable(
     align = "l",
     caption = paste(
-      "The", nrow(.), "enriched Hallmark pathways for the fAI comparison",
+      "The", nrow(.), "enriched chromosomal pathways for the fAI comparison",
       "using non-directional rankings and a threshold of FDR < 0.05."
     )
   ) %>%
@@ -425,16 +800,16 @@ gsea_nd_chr$fAI %>%
   )
 ```
 
-## Functional enrichment
+# Further enrichment testing
 
 It was noted previously that a large proportion of DE genes were located on the same chromosome as the mutation.
-It was therefore posited that the compensatory genetic responses triggered by a mutation may originate from nearby the disrupted gene.
+It was therefore posited that the compensatory genetic responses triggered by a mutation may originate from genes nearby the disrupted gene.
 If this is true, genes involved in similar functional pathways may be located within a close genetic distance.
 This would make sense from an evolutionary point of view because it would allow advantageous allelic combinations to remain together due to their low chance for recombination.
 
 To test this idea, the leading edge genes from significantly enriched pathways were tested for enrichment of localisation on chromosome 17, the same chromosome as *psen1*.
 
-#### Directional
+## Directional
 
 ```{r}
 edgeGenes_d_chr <- lapply(gsea_d_chr, function(x){
@@ -445,13 +820,13 @@ edgeGenes_d_chr <- lapply(gsea_d_chr, function(x){
 # edgeGenes_d_chr <- edgeGenes_d_chr[sapply(edgeGenes_d_chr, length) > 0]
 ```
 
-##### GSEA
+### GSEA
 
 ```{r}
 map2(ranks_d, edgeGenes_d_chr, function(ranks, edgeGenes){
   lapply(edgeGenes, function(chr){
     ranks <- ranks[chr]
-    fgseaMultilevel(goByID, ranks, eps = 0) %>%
+    fgseaMultilevel(wkByID, ranks, eps = 0) %>%
       as_tibble() %>%
       dplyr::rename(FDR = padj) %>%
       mutate(
@@ -464,7 +839,7 @@ map2(ranks_d, edgeGenes_d_chr, function(ranks, edgeGenes){
 })
 ```
 
-##### goseq
+### goseq
 
 ```{r}
 pwf <- map2(topTables, edgeGenes_d_chr, function(table, edgeGenes){
@@ -495,7 +870,7 @@ goseq <- lapply(pwf, function(genotype){
 })
 ```
 
-#### Non-directional
+## Non-directional
 
 ```{r}
 edgeGenes_nd_chr <- lapply(gsea_nd_chr, function(x){
@@ -510,7 +885,7 @@ edgeGenes_nd_chr <- lapply(gsea_nd_chr, function(x){
 edgeGenes_nd_chr <- edgeGenes_nd_chr[sapply(edgeGenes_nd_chr, length) > 0]
 ```
 
-##### GSEA
+### GSEA
 
 ```{r}
 map2(ranks_nd, edgeGenes_nd_chr, function(ranks, edgeGenes){
@@ -529,7 +904,7 @@ map2(ranks_nd, edgeGenes_nd_chr, function(ranks, edgeGenes){
 })
 ```
 
-##### goseq
+### goseq
 
 ```{r}
 pwf <- map2(topTables, edgeGenes_nd_chr, function(table, edgeGenes){

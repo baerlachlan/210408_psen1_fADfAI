@@ -1,6 +1,6 @@
 name: "210408_psen1_fADfAI_snv"
 output_dir: ../docs
-exclude: []
+exclude: ["*snv_profiles.Rmd", "*variants.Rmd"]
 navbar:
   title: "210408_psen1_fADfAI_snv"
   left:

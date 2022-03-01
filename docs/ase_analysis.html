@@ -14,8 +14,8 @@
 
 <title>Allele Specific Expression Analysis</title>
 
-<script src="site_libs/header-attrs-2.9/header-attrs.js"></script>
-<script src="site_libs/jquery-1.11.3/jquery.min.js"></script>
+<script src="site_libs/header-attrs-2.11/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
 <script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
@@ -369,14 +369,14 @@ div.tocify {
 
 <h1 class="title toc-ignore">Allele Specific Expression Analysis</h1>
 <h4 class="author">Lachlan Baer</h4>
-<h4 class="date">12 October, 2021</h4>
+<h4 class="date">01 March, 2022</h4>
 
 </div>
 
 
 <div id="introduction" class="section level1">
 <h1>Introduction</h1>
-<p>The motivation for performing an allele specific expression (ASE) analysis stems from the idea that selecting for a particular chromosome (i.e. the mutant chromosome) within an experimental group also selects for any expression quantitative trait loci (eQTLs) that exist on that chromosome. Therefore exists the possibility of differences in transcript abundances between groups tested for differential expression due to different sets of allelic expression characteristics and separate from the effect of the mutation. This would not be a problem in isogenic organisms such as mice, but zebrafish are anything but isogenic. If the eQTL idea is true, one would expect to see a number of differentially expressed genes on the same chromosome of the mutation, which is indeed the case in this dataset. However, if not true, and the observations are caused by the effect of the mutation, an explanation must describe the functional relationship between genes on the same chromosome as the mutation. One such possibility is that functionally related genes tend to cluster on chromosomes through evolutionary time because it allows for advantageous allelic combinations to remain together due to the suppressed chance for separation through recombination or chromosomal segregation.</p>
+<p>The motivation for performing an allele specific expression (ASE) analysis stems from the idea that selecting for a particular chromosome (i.e. the mutant chromosome) within an experimental group also selects for any expression quantitative trait loci (eQTLs) that exist on that chromosome. Therefore exists the possibility of differences in transcript abundances between groups tested for differential expression due to different sets of allelic expression characteristics and separate from the effect of the mutation. This would not be a problem in isogenic organisms such as mice, but zebrafish are not isogenic. If the eQTL idea is true, one would expect to see a number of differentially expressed genes on the same chromosome of the mutation, which is indeed the case in this dataset. However, if not true, and the observations are caused by the effect of the mutation, an explanation must describe the functional relationship between genes on the same chromosome as the mutation. One such possibility is that functionally related genes tend to cluster on chromosomes through evolutionary time because it allows for advantageous allelic combinations to remain together due to the suppressed chance for separation through recombination or chromosomal segregation.</p>
 <p>The aim of this analysis is to therefore tease apart these two possibilities to the best ability with the available RNA-seq data. In particular, allele specific expression testing will be used to assess:</p>
 <ol style="list-style-type: decimal">
 <li>The potential for ASE to impact differential expression testing in an undesired manner.</li>
@@ -404,14 +404,15 @@ div.tocify {
   ## Project specific
   library(statmod)
   library(fgsea)
+  library(VariantAnnotation)
 })</code></pre>
 <pre class="r"><code>if (interactive()) setwd(here::here())
 theme_set(theme_bw())
-cores &lt;- availableCores() - 2
-source(&quot;~/bioinformatics/bioToolkit/lbFuncs.R&quot;)
-## Select base directory for the project
-projDir &lt;- here()
-# projDir &lt;- &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI_snv&quot;</code></pre>
+cores &lt;- availableCores() - 1</code></pre>
+<pre class="r"><code>source(&quot;~/bioinformatics/bioToolkit/lbFuncs.R&quot;)</code></pre>
+<pre class="r"><code>## Choose either remote or local project directory
+# projDir &lt;- here()
+projDir &lt;- &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI&quot;</code></pre>
 <div id="ensdb" class="section level2">
 <h2>EnsDb</h2>
 <p>An <code>EnsDb</code> object was obtained for Ensembl release 101 from which gene and exon information was extracted for annotation required in the analysis.</p>
@@ -1148,7 +1149,7 @@ wt &lt;- metadata$alias %&gt;%
 <h1>Allele specific expression</h1>
 <p>Allele specific expression testing was performed for each sample at the gene-level with <code>GeneiASE</code> software. Genes were classified as showing allele specific expression (ASE) if they had a FDR-adjusted p-value &lt; 0.05.</p>
 <pre class="r"><code>files &lt;- list.files(
-  file.path(projDir, &quot;13_geneiase/2_ase&quot;),
+  file.path(projDir, &quot;analysis-variants/13_geneiase/2_ase&quot;),
   full.names = TRUE
 )
 samples &lt;- basename(files) %&gt;%
@@ -1178,7 +1179,7 @@ aseRCByGene &lt;- readRDS(here(&quot;files/aseRCByGene.Rds&quot;)) %&gt;%
     alias = factor(alias),
     propASE = nASE / total
   )</code></pre>
-<p>Between <em>327</em> and <em>557</em> genes were classified as showing ASE across all samples, which accounted for between <em>4.53%</em> and <em>7.14%</em> of the total genes tested.</p>
+<p>Between <em>352</em> and <em>586</em> genes were classified as showing ASE across all samples, which accounted for between <em>4.04%</em> and <em>5.51%</em> of the total genes tested.</p>
 <pre class="r"><code>nASE %&gt;%
   ggplot(aes(alias, nASE, fill = genotype)) +
   geom_bar(stat = &quot;identity&quot;, colour = &quot;black&quot;) +
@@ -1193,16 +1194,16 @@ aseRCByGene &lt;- readRDS(here(&quot;files/aseRCByGene.Rds&quot;)) %&gt;%
     axis.text.x = element_text(angle = 270, vjust = 0.5, hjust = 0)
   )</code></pre>
 <div class="figure" style="text-align: center">
-<img src="ase_analysis_files/figure-html/nAsePlot-1.png" alt="*The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*" width="768" />
+<img src="ase_analysis_files/figure-html/nAsePlot-1.png" alt="*The number of genes classified as showing significant ASE based on an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.*" width="768" />
 <p class="caption">
-<em>The number of genes classified as showing significant ASE basedon an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.</em>
+<em>The number of genes classified as showing significant ASE based on an FDR-adjusted p-value cut-off of 0.05. The number of genes showing ASE was fairly consistent across all samples and genotypes.</em>
 </p>
 </div>
 </div>
 <div id="ase-overlap-with-de-genes" class="section level1">
 <h1>ASE overlap with DE genes</h1>
 <p>Previously analysed different expression testing results were loaded as a list of topTables.</p>
-<pre class="r"><code>topDE &lt;- readRDS(file.path(projDir, &quot;files/topTables.Rds&quot;)) %&gt;%
+<pre class="r"><code>topDE &lt;- readRDS(file.path(projDir, &quot;files/topTables_cqn.Rds&quot;)) %&gt;%
   set_names(c(&quot;fAD&quot;, &quot;fAI&quot;))</code></pre>
 <p>The fAD vs WT comparison showed 10 DE genes.</p>
 <pre class="r"><code>topDE[[1]] %&gt;%
@@ -1265,62 +1266,16 @@ col12a1a
 17
 </td>
 <td style="text-align:left;">
-1.87
+1.84
 </td>
 <td style="text-align:left;">
-3.83
+3.85
 </td>
 <td style="text-align:left;">
-1.73e-16
+3.56e-14
 </td>
 <td style="text-align:left;">
-1.73e-16
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000093378
-</td>
-<td style="text-align:left;">
-si:ch211-235i11.5
-</td>
-<td style="text-align:left;">
-17
-</td>
-<td style="text-align:left;">
-0.63
-</td>
-<td style="text-align:left;">
-2.96
-</td>
-<td style="text-align:left;">
-2.56e-07
-</td>
-<td style="text-align:left;">
-5.11e-07
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000079324
-</td>
-<td style="text-align:left;">
-ano9b
-</td>
-<td style="text-align:left;">
-7
-</td>
-<td style="text-align:left;">
-1.37
-</td>
-<td style="text-align:left;">
--1.19
-</td>
-<td style="text-align:left;">
-2.35e-04
-</td>
-<td style="text-align:left;">
-7.05e-04
+3.56e-14
 </td>
 </tr>
 <tr>
@@ -1334,16 +1289,62 @@ adi1
 17
 </td>
 <td style="text-align:left;">
+0.56
+</td>
+<td style="text-align:left;">
+2.88
+</td>
+<td style="text-align:left;">
+5.78e-06
+</td>
+<td style="text-align:left;">
+1.16e-05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000093378
+</td>
+<td style="text-align:left;">
+si:ch211-235i11.5
+</td>
+<td style="text-align:left;">
+17
+</td>
+<td style="text-align:left;">
 0.54
 </td>
 <td style="text-align:left;">
-2.81
+3.06
 </td>
 <td style="text-align:left;">
-1.69e-03
+8.74e-05
 </td>
 <td style="text-align:left;">
-6.74e-03
+2.62e-04
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000079324
+</td>
+<td style="text-align:left;">
+ano9b
+</td>
+<td style="text-align:left;">
+7
+</td>
+<td style="text-align:left;">
+1.20
+</td>
+<td style="text-align:left;">
+-1.24
+</td>
+<td style="text-align:left;">
+4.82e-04
+</td>
+<td style="text-align:left;">
+1.93e-03
 </td>
 </tr>
 <tr>
@@ -1357,16 +1358,16 @@ CR318588.1
 18
 </td>
 <td style="text-align:left;">
-3.31
+3.26
 </td>
 <td style="text-align:left;">
-2.45
+2.43
 </td>
 <td style="text-align:left;">
-5.15e-03
+4.30e-03
 </td>
 <td style="text-align:left;">
-2.68e-02
+2.20e-02
 </td>
 </tr>
 <tr>
@@ -1380,16 +1381,39 @@ myhb
 6
 </td>
 <td style="text-align:left;">
-4.04
+4.23
 </td>
 <td style="text-align:left;">
-2.38
+2.41
 </td>
 <td style="text-align:left;">
-5.15e-03
+4.30e-03
 </td>
 <td style="text-align:left;">
-3.09e-02
+2.58e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000018281
+</td>
+<td style="text-align:left;">
+cfap161
+</td>
+<td style="text-align:left;">
+18
+</td>
+<td style="text-align:left;">
+-0.88
+</td>
+<td style="text-align:left;">
+-0.36
+</td>
+<td style="text-align:left;">
+7.66e-03
+</td>
+<td style="text-align:left;">
+5.77e-02
 </td>
 </tr>
 <tr>
@@ -1406,13 +1430,13 @@ si:ch211-235i11.4
 0.34
 </td>
 <td style="text-align:left;">
-3.57
+3.54
 </td>
 <td style="text-align:left;">
-7.51e-03
+7.66e-03
 </td>
 <td style="text-align:left;">
-5.26e-02
+6.13e-02
 </td>
 </tr>
 <tr>
@@ -1426,67 +1450,44 @@ CR318588.3
 18
 </td>
 <td style="text-align:left;">
-2.05
+2.02
 </td>
 <td style="text-align:left;">
-2.71
+2.55
 </td>
 <td style="text-align:left;">
-1.18e-02
+1.02e-02
 </td>
 <td style="text-align:left;">
-9.46e-02
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000088507
-</td>
-<td style="text-align:left;">
-znf982
-</td>
-<td style="text-align:left;">
-17
-</td>
-<td style="text-align:left;">
-0.39
-</td>
-<td style="text-align:left;">
-2.28
-</td>
-<td style="text-align:left;">
-4.94e-02
-</td>
-<td style="text-align:left;">
-4.91e-01
+9.16e-02
 </td>
 </tr>
 <tr>
 <td style="text-align:left;">
-ENSDARG00000056065
+ENSDARG00000099117
 </td>
 <td style="text-align:left;">
-mov10b.2
+si:dkey-33i11.4
 </td>
 <td style="text-align:left;">
-8
+16
 </td>
 <td style="text-align:left;">
-1.37
+3.12
 </td>
 <td style="text-align:left;">
 -1.78
 </td>
 <td style="text-align:left;">
-4.94e-02
+4.86e-02
 </td>
 <td style="text-align:left;">
-4.94e-01
+4.86e-01
 </td>
 </tr>
 </tbody>
 </table>
-<p>The fAI vs WT comparison showed 6 DE genes.</p>
+<p>The fAI vs WT comparison showed 9 DE genes.</p>
 <pre class="r"><code>topDE[[2]] %&gt;%
   dplyr::filter(DE) %&gt;%
   dplyr::select(geneID = gene_id, symbol = gene_name, chromosome, logFC, logCPM, FDR, bonfP) %&gt;%
@@ -1508,7 +1509,7 @@ mov10b.2
   )</code></pre>
 <table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
 <caption>
-The 6 differentially expressed genes for Acne Inversa genotype in comparison to wildtype
+The 9 differentially expressed genes for Acne Inversa genotype in comparison to wildtype
 </caption>
 <thead>
 <tr>
@@ -1547,16 +1548,16 @@ psen1
 17
 </td>
 <td style="text-align:left;">
--0.78
+-0.85
 </td>
 <td style="text-align:left;">
-5.33
+5.37
 </td>
 <td style="text-align:left;">
-4.11e-70
+1.32e-45
 </td>
 <td style="text-align:left;">
-4.11e-70
+1.32e-45
 </td>
 </tr>
 <tr>
@@ -1573,36 +1574,13 @@ dglucy
 -0.97
 </td>
 <td style="text-align:left;">
-5.01
+5.03
 </td>
 <td style="text-align:left;">
-3.84e-05
+1.13e-05
 </td>
 <td style="text-align:left;">
-7.68e-05
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000061758
-</td>
-<td style="text-align:left;">
-sh3pxd2ab
-</td>
-<td style="text-align:left;">
-17
-</td>
-<td style="text-align:left;">
--3.04
-</td>
-<td style="text-align:left;">
-1.06
-</td>
-<td style="text-align:left;">
-2.03e-04
-</td>
-<td style="text-align:left;">
-6.08e-04
+2.54e-05
 </td>
 </tr>
 <tr>
@@ -1616,16 +1594,39 @@ fam167aa
 17
 </td>
 <td style="text-align:left;">
--3.40
+-4.65
 </td>
 <td style="text-align:left;">
-0.32
+0.23
 </td>
 <td style="text-align:left;">
-3.51e-04
+1.13e-05
 </td>
 <td style="text-align:left;">
-1.40e-03
+3.39e-05
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000061758
+</td>
+<td style="text-align:left;">
+sh3pxd2ab
+</td>
+<td style="text-align:left;">
+17
+</td>
+<td style="text-align:left;">
+-3.12
+</td>
+<td style="text-align:left;">
+0.85
+</td>
+<td style="text-align:left;">
+1.22e-05
+</td>
+<td style="text-align:left;">
+4.86e-05
 </td>
 </tr>
 <tr>
@@ -1639,16 +1640,62 @@ kcnk17
 17
 </td>
 <td style="text-align:left;">
--1.52
+-1.74
 </td>
 <td style="text-align:left;">
--1.00
+-1.23
 </td>
 <td style="text-align:left;">
-3.23e-03
+2.01e-03
 </td>
 <td style="text-align:left;">
-1.61e-02
+1.01e-02
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000101775
+</td>
+<td style="text-align:left;">
+zgc:172014
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+-2.34
+</td>
+<td style="text-align:left;">
+-0.57
+</td>
+<td style="text-align:left;">
+2.29e-02
+</td>
+<td style="text-align:left;">
+1.37e-01
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000117721
+</td>
+<td style="text-align:left;">
+CT025771.1
+</td>
+<td style="text-align:left;">
+13
+</td>
+<td style="text-align:left;">
+-2.57
+</td>
+<td style="text-align:left;">
+-1.65
+</td>
+<td style="text-align:left;">
+2.75e-02
+</td>
+<td style="text-align:left;">
+1.93e-01
 </td>
 </tr>
 <tr>
@@ -1662,336 +1709,522 @@ si:ch211-278p9.3
 17
 </td>
 <td style="text-align:left;">
--2.29
+-1.73
 </td>
 <td style="text-align:left;">
--2.34
+-2.53
 </td>
 <td style="text-align:left;">
-4.28e-02
+3.50e-02
 </td>
 <td style="text-align:left;">
-2.57e-01
+2.87e-01
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+ENSDARG00000053240
+</td>
+<td style="text-align:left;">
+kif6
+</td>
+<td style="text-align:left;">
+17
+</td>
+<td style="text-align:left;">
+-0.86
+</td>
+<td style="text-align:left;">
+0.73
+</td>
+<td style="text-align:left;">
+3.50e-02
+</td>
+<td style="text-align:left;">
+3.15e-01
 </td>
 </tr>
 </tbody>
 </table>
-<p>For each differentially expressed gene, ASE results were assessed across each sample. Due to the requirements for each gene to possess at least one heterozygous single nucleotide variant (SNV) in order to be tested for ASE, not all detected genes were subject to the analysis. Furthermore, a substantial number of genes containing het-SNVs were excluded from ASE testing as they did not pass quality control requirements. Therefore it is important to distinguish whether a gene was tested and did not show ASE opposed to not being tested at all. For each DE gene, samples were assigned to one of three categories:</p>
+<p>For each significant differentially expressed gene, ASE results were assessed across each sample. Each sample contained a different subset of genes available for ASE testing due to conditions that must be met when preparing the data. This means that in some samples information about a gene of interest may not be available. For a gene to reach the ASE testing stage, it must satisfy each of the following criteria sequentially:</p>
 <ol style="list-style-type: decimal">
-<li>Tested and shows ASE</li>
-<li>Tested and does not show ASE</li>
-<li>Not tested (no detected het-SNVs or filtered by QC)</li>
+<li>Have genotypes called within exons by the <code>GATK</code> RNA-seq short variant discovery workflow</li>
+<li>Pass specific hard filters recommended by the <code>GATK</code> for RNA-seq data</li>
+<li>Contain at least 1 heterozygous SNV</li>
+<li>Pass QC measures for ASE testing</li>
 </ol>
-<pre class="r"><code>deGenes &lt;- sapply(topDE, dplyr::filter, DE, simplify = FALSE)</code></pre>
-<pre class="r"><code>deAseOverlap &lt;- sapply(deGenes, function(x){
-  lapply(topASE, function(y){
-    dplyr::select(x, feat = gene_id, symbol = gene_name, chromosome) %&gt;%
-      left_join(y[,c(&quot;feat&quot;, &quot;sample&quot;, &quot;genotype&quot;, &quot;ASE&quot;)])
-  }) %&gt;%
-    bind_rows() %&gt;%
-    group_by(feat, ASE) %&gt;%
-    tally() %&gt;%
-    ungroup() %&gt;%
-    pivot_wider(names_from = ASE, values_from = n, values_fill = 0) %&gt;%
-    dplyr::select(gene = feat, ASE = `TRUE`, no_ASE = `FALSE`, not_tested = `NA`)
+<p>Detailed information about the workflow’s QC implementation can be found in the <a href="ase_qc.html">ASE QC document</a>.</p>
+<pre class="r"><code>deGenes &lt;- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
+de_fAD &lt;- deGenes$fAD$gene_id
+de_fAI &lt;- deGenes$fAI$gene_id</code></pre>
+<div id="genotypes-called" class="section level2">
+<h2>Genotypes called</h2>
+<pre class="r"><code>vcf_file &lt;- file.path(
+  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI&quot;,
+  &quot;analysis-variants/10_variants/4_extract/all_samples.vcf.gz&quot;
+)
+svp &lt;- ScanVcfParam(info = &quot;&quot;, geno = c(&quot;GT&quot;, &quot;GQ&quot;))
+vcf &lt;- suppressWarnings({
+  readVcf(vcf_file, param = svp)
+})
+samples &lt;- samples(header(vcf))</code></pre>
+<pre class="r"><code>gr &lt;- rowRanges(vcf)[,c(&quot;REF&quot;, &quot;ALT&quot;)]
+gr$REF &lt;- as.character(gr$REF)
+gr$ALT &lt;- CharacterList(gr$ALT) %&gt;%
+  unstrsplit(sep = &quot;,&quot;)
+genome(gr) &lt;- genome(exons)  # Genomes must match for using findOverlaps()</code></pre>
+<pre class="r"><code>genes_genotyped &lt;- sapply(samples, function(sample){
+  gr$GT &lt;- geno(vcf)$GT[,sample] %&gt;%
+    str_replace(., &quot;\\|&quot;, &quot;\\/&quot;)  # Not concerned with phasing atm
+  gr$GQ &lt;- geno(vcf)$GQ[,sample]
+  gr &lt;- gr %&gt;%
+    plyranges::filter(!is.na(GQ))  # Remove positions with no genotype call
+  genome(gr) &lt;- genome(exons)  # Ensure same genome to allow findOverlaps()
+  ## Annotate variants with genes
+  hits &lt;- findOverlaps(gr, exons)
+  genes &lt;- names(exons[subjectHits(hits)]) %&gt;%
+    unique()
+  genes
 }, simplify = FALSE)</code></pre>
-<p><strong>Alzheimer’s DE genes:</strong></p>
-<pre class="r"><code>deAseOverlap$fAD %&gt;%
-  kable(
-    align = &quot;l&quot;,
-    caption = paste(
-      &quot;The number of samples that were tested and showed ASE, tested and did&quot;,
-      &quot;not show ASE, or not tested at all for each differentially expressed&quot;,
-      &quot;gene in the Alzheimer&#39;s vs wildtype comparison&quot;
+<pre class="r"><code>metrics &lt;- sapply(deGenes, function(x){
+  gene_id &lt;- x$gene_id
+  lapply(seq_along(genes_genotyped), function(ind){
+    tibble(
+      gene = gene_id,
+      sample = names(genes_genotyped[ind])
+    ) %&gt;%
+      left_join(
+        as.data.frame(mcols(genes)[,c(&quot;gene_name&quot;, &quot;gene_id&quot;)]),
+        by = c(&quot;gene&quot; = &quot;gene_id&quot;)
+      ) %&gt;%
+      left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)]) %&gt;%
+      mutate(genotype_called = gene_id %in% genes_genotyped[[ind]])
+  }) %&gt;%
+    bind_rows()
+}, simplify = FALSE)</code></pre>
+<!--
+
+```r
+deAseOverlap <- sapply(deGenes, function(x){
+lapply(topASE, function(y){
+dplyr::select(x, feat = gene_id, symbol = gene_name, chromosome) %>%
+left_join(y[,c("feat", "sample", "genotype", "ASE")])
+}) %>%
+bind_rows() %>%
+group_by(feat, ASE) %>%
+tally() %>%
+ungroup() %>%
+pivot_wider(names_from = ASE, values_from = n, values_fill = 0) %>%
+dplyr::select(gene = feat, ASE = `TRUE`, no_ASE = `FALSE`, not_tested = `NA`)
+}, simplify = FALSE)
+```
+-->
+</div>
+<div id="passed-hard-filters" class="section level2">
+<h2>Passed hard filters</h2>
+<pre class="r"><code>vcf_file &lt;- file.path(
+  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI&quot;,
+  &quot;analysis-variants/10_variants/6_select/all_samples.vcf.gz&quot;
+)
+svp &lt;- ScanVcfParam(info = &quot;&quot;, geno = c(&quot;GT&quot;, &quot;GQ&quot;))
+vcf &lt;- suppressWarnings({
+  readVcf(vcf_file, param = svp)
+})
+samples &lt;- samples(header(vcf))</code></pre>
+<pre class="r"><code>gr &lt;- rowRanges(vcf)[,c(&quot;REF&quot;, &quot;ALT&quot;)]
+gr$REF &lt;- as.character(gr$REF)
+gr$ALT &lt;- CharacterList(gr$ALT) %&gt;%
+  unstrsplit(sep = &quot;,&quot;)
+genome(gr) &lt;- genome(exons)  # Genomes must match for using findOverlaps()</code></pre>
+<pre class="r"><code>genes_hardFilter &lt;- sapply(samples, function(sample){
+  gr$GT &lt;- geno(vcf)$GT[,sample] %&gt;%
+    str_replace(., &quot;\\|&quot;, &quot;\\/&quot;)  # Not concerned with phasing atm
+  gr$GQ &lt;- geno(vcf)$GQ[,sample]
+  gr &lt;- gr %&gt;%
+    plyranges::filter(!is.na(GQ))  # Remove positions with no genotype call
+  genome(gr) &lt;- genome(exons)  # Ensure same genome to allow findOverlaps()
+  ## Annotate variants with genes
+  hits &lt;- findOverlaps(gr, exons)
+  genes &lt;- names(exons[subjectHits(hits)]) %&gt;%
+    unique()
+  genes
+}, simplify = FALSE)</code></pre>
+<pre class="r"><code>hard_filter &lt;- sapply(deGenes, function(x){
+  genes &lt;- x$gene_id
+  lapply(seq_along(genes_hardFilter), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_hardFilter[ind]),
+      hard_filter = genes %in% genes_hardFilter[[ind]]
     )
+  }) %&gt;%
+    bind_rows()
+}, simplify = FALSE)</code></pre>
+<pre class="r"><code>## Update metrics
+metrics &lt;- map2(metrics, hard_filter, function(x, y){left_join(x, y)})</code></pre>
+</div>
+<div id="heterozygous" class="section level2">
+<h2>Heterozygous</h2>
+<pre class="r"><code>## Use the same vcf (as for hard filters) but also filter for heterozygous genotypes
+genes_heterozygous &lt;- sapply(samples, function(sample){
+  gr$GT &lt;- geno(vcf)$GT[,sample] %&gt;%
+    str_replace(., &quot;\\|&quot;, &quot;\\/&quot;)  # Not concerned with phasing atm
+  gr$GQ &lt;- geno(vcf)$GQ[,sample]
+  gr &lt;- gr %&gt;%
+    plyranges::filter(!is.na(GQ)) %&gt;%  # Remove positions with no genotype call
+    as.data.frame() %&gt;%
+    separate(
+      col = &quot;GT&quot;, into = c(&quot;allele_1&quot;, &quot;allele_2&quot;), sep = &quot;/&quot;,
+      remove = FALSE, convert = TRUE, fill = &quot;right&quot;
+    ) %&gt;%
+    dplyr::filter(allele_1 != allele_2) %&gt;%
+    GRanges()
+  genome(gr) &lt;- genome(exons)  # Ensure same genome to allow findOverlaps()
+  ## Annotate variants with genes
+  hits &lt;- findOverlaps(gr, exons)
+  genes &lt;- names(exons[subjectHits(hits)]) %&gt;%
+    unique()
+  genes
+}, simplify = FALSE)</code></pre>
+<pre class="r"><code>heterozygous &lt;- sapply(deGenes, function(x){
+  genes &lt;- x$gene_id
+  lapply(seq_along(genes_heterozygous), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_heterozygous[ind]),
+      heterozygous = genes %in% genes_heterozygous[[ind]]
+    )
+  }) %&gt;%
+    bind_rows()
+}, simplify = FALSE)</code></pre>
+<pre class="r"><code>## Update metrics
+metrics &lt;- map2(metrics, heterozygous, function(x, y){left_join(x, y)})</code></pre>
+</div>
+<div id="wasp" class="section level2">
+<h2>WASP</h2>
+<pre class="r"><code>## Rds file generated in QC doc
+aseRC &lt;- readRDS(file.path(here(), &quot;files/aseRC.Rds&quot;))</code></pre>
+<pre class="r"><code>genes_wasp &lt;- lapply(aseRC, function(x){
+  gr &lt;- tibble(
+    seqnames = x$chromosome,
+    start = x$position,
+    end = x$position,
   ) %&gt;%
+    GRanges()
+  genome(gr) &lt;- genome(exons)
+  hits &lt;- findOverlaps(gr, exons)
+  genes &lt;- names(exons[subjectHits(hits)]) %&gt;%
+    unique()
+  genes
+})</code></pre>
+<pre class="r"><code>wasp &lt;- sapply(deGenes, function(x){
+  genes &lt;- x$gene_id
+  lapply(seq_along(genes_wasp), function(ind){
+    tibble(
+      gene = genes,
+      sample = names(genes_wasp[ind]),
+      wasp = genes %in% genes_wasp[[ind]]
+    )
+  }) %&gt;%
+    bind_rows()
+}, simplify = FALSE)</code></pre>
+<pre class="r"><code>## Update metrics
+metrics &lt;- map2(metrics, wasp, function(x, y){left_join(x, y)})</code></pre>
+</div>
+<div id="ase" class="section level2">
+<h2>ASE</h2>
+<pre class="r"><code>geneiase &lt;- lapply(deGenes, function(x){
+  genes &lt;- x$gene_id
+  lapply(topASE, function(y){
+    dplyr::filter(y, feat %in% genes) %&gt;%
+      dplyr::select(gene = feat, sample, n.vars, p.nom, fdr, sig)
+  }) %&gt;% bind_rows()
+})</code></pre>
+<pre class="r"><code>## Update metrics
+metrics &lt;- map2(metrics, geneiase, function(x, y){left_join(x, y)})</code></pre>
+</div>
+<div id="summary" class="section level2">
+<h2>Summary</h2>
+<pre class="r"><code>lapply(metrics, function(x){
+  x %&gt;%
+    group_by(gene) %&gt;%
+    summarise(
+      genotype_called = sum(genotype_called),
+      hard_filter = sum(hard_filter),
+      heterozygous = sum(heterozygous),
+      wasp = sum(wasp)
+    ) %&gt;%
+    left_join(chrGenes_df, by = c(&quot;gene&quot; = &quot;feat&quot;)) %&gt;%
+    dplyr::select(gene, chr, everything())
+})</code></pre>
+<pre><code>## $fAD
+## # A tibble: 10 × 6
+##    gene               chr   genotype_called hard_filter heterozygous  wasp
+##    &lt;chr&gt;              &lt;chr&gt;           &lt;int&gt;       &lt;int&gt;        &lt;int&gt; &lt;int&gt;
+##  1 ENSDARG00000001993 chr6               24          24           14     1
+##  2 ENSDARG00000018281 chr18              24          24           10     0
+##  3 ENSDARG00000020448 chr17              24          24           16    16
+##  4 ENSDARG00000078322 chr17              24          24           24    24
+##  5 ENSDARG00000079324 chr7               24          24           18     0
+##  6 ENSDARG00000088298 chr17              24          24            8     8
+##  7 ENSDARG00000092191 chr18              24          24           12    10
+##  8 ENSDARG00000093378 chr17              24          24           13    10
+##  9 ENSDARG00000094719 chr18              24          24           20    19
+## 10 ENSDARG00000099117 chr16              17          17            4     1
+## 
+## $fAI
+## # A tibble: 9 × 6
+##   gene               chr   genotype_called hard_filter heterozygous  wasp
+##   &lt;chr&gt;              &lt;chr&gt;           &lt;int&gt;       &lt;int&gt;        &lt;int&gt; &lt;int&gt;
+## 1 ENSDARG00000004870 chr17              24          24           18    18
+## 2 ENSDARG00000005179 chr17              24          24           24    24
+## 3 ENSDARG00000053240 chr17              24          24           23     3
+## 4 ENSDARG00000061758 chr17              24          24            7     0
+## 5 ENSDARG00000067665 chr17              24          16            3     0
+## 6 ENSDARG00000094098 chr17              23          22            3     0
+## 7 ENSDARG00000101775 chr4               24          22           10     4
+## 8 ENSDARG00000105453 chr17              24          24           17     2
+## 9 ENSDARG00000117721 chr13              19          19            1     0</code></pre>
+<pre class="r"><code>metrics$fAD %&gt;%
+  left_join(metadata[,c(&quot;sample&quot;, &quot;genotype&quot;)]) %&gt;%
+  dplyr::filter(genotype != &quot;fAI-like/+&quot;) %&gt;%
+  group_by(gene, genotype) %&gt;%
+  summarise(
+    genotype_called = sum(genotype_called),
+    hard_filter = sum(hard_filter),
+    heterozygous = sum(heterozygous),
+    wasp = sum(wasp)
+  ) %&gt;%
+  pivot_longer(
+    cols = c(&quot;genotype_called&quot;, &quot;hard_filter&quot;, &quot;heterozygous&quot;, &quot;wasp&quot;),
+    names_to = &quot;step&quot;,
+    values_to = &quot;count&quot;
+  ) %&gt;%
+  ungroup() %&gt;%
+  left_join(
+    as.data.frame(mcols(genes)[,c(&quot;gene_name&quot;, &quot;gene_id&quot;)]),
+    by = c(&quot;gene&quot; = &quot;gene_id&quot;)
+  ) %&gt;%
+  dplyr::mutate(gene_name = factor(gene_name, levels = deGenes$fAD$gene_name)) %&gt;%
+  ggplot(aes(fill = genotype, x = step, y = count)) +
+  geom_bar(position = &quot;dodge&quot;, stat = &quot;identity&quot;) +
+  scale_y_continuous(breaks = seq(1, 10)) +
+  scale_fill_manual(values = genoCols) +
+  facet_wrap(~gene_name, nrow = 2)</code></pre>
+<p><img src="ase_analysis_files/figure-html/unnamed-chunk-23-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>## ASE is shown in the top DE gene for fAD comparison
+metrics$fAD %&gt;% dplyr::filter(gene_name == &quot;col12a1a&quot;) %&gt;% dplyr::arrange(genotype) %&gt;% print(n=Inf)</code></pre>
+<pre><code>## # A tibble: 24 × 12
+##    gene      sample gene_name genotype  genotype_called hard_filter heterozygous
+##    &lt;chr&gt;     &lt;chr&gt;  &lt;chr&gt;     &lt;fct&gt;     &lt;lgl&gt;           &lt;lgl&gt;       &lt;lgl&gt;       
+##  1 ENSDARG0… 10_KB… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  2 ENSDARG0… 16_KB… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  3 ENSDARG0… 19_KB… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  4 ENSDARG0… 22_KB… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  5 ENSDARG0… 4_KB_… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  6 ENSDARG0… 7_KB_… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  7 ENSDARG0… 8_KB_… col12a1a  EOfAD-li… TRUE            TRUE        TRUE        
+##  8 ENSDARG0… 12_KB… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+##  9 ENSDARG0… 15_KB… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 10 ENSDARG0… 18_KB… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 11 ENSDARG0… 21_KB… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 12 ENSDARG0… 24_KB… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 13 ENSDARG0… 2_KB_… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 14 ENSDARG0… 6_KB_… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 15 ENSDARG0… 9_KB_… col12a1a  fAI-like… TRUE            TRUE        TRUE        
+## 16 ENSDARG0… 11_KB… col12a1a  WT        TRUE            TRUE        TRUE        
+## 17 ENSDARG0… 13_KB… col12a1a  WT        TRUE            TRUE        TRUE        
+## 18 ENSDARG0… 14_KB… col12a1a  WT        TRUE            TRUE        TRUE        
+## 19 ENSDARG0… 17_KB… col12a1a  WT        TRUE            TRUE        TRUE        
+## 20 ENSDARG0… 1_KB_… col12a1a  WT        TRUE            TRUE        TRUE        
+## 21 ENSDARG0… 20_KB… col12a1a  WT        TRUE            TRUE        TRUE        
+## 22 ENSDARG0… 23_KB… col12a1a  WT        TRUE            TRUE        TRUE        
+## 23 ENSDARG0… 3_KB_… col12a1a  WT        TRUE            TRUE        TRUE        
+## 24 ENSDARG0… 5_KB_… col12a1a  WT        TRUE            TRUE        TRUE        
+## # … with 5 more variables: wasp &lt;lgl&gt;, n.vars &lt;dbl&gt;, p.nom &lt;dbl&gt;, fdr &lt;dbl&gt;,
+## #   sig &lt;lgl&gt;</code></pre>
+<!--
+**Alzheimer's DE genes:**
+
+
+```r
+deAseOverlap$fAD %>%
+  kable(
+    align = "l",
+    caption = paste(
+      "The number of samples that were tested and showed ASE, tested and did",
+      "not show ASE, or not tested at all for each differentially expressed",
+      "gene in the Alzheimer's vs wildtype comparison"
+    )
+  ) %>%
   kable_styling(
-    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
-  )</code></pre>
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
 <table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
-<caption>
-The number of samples that were tested and showed ASE, tested and did not show ASE, or not tested at all for each differentially expressed gene in the Alzheimer’s vs wildtype comparison
-</caption>
-<thead>
-<tr>
-<th style="text-align:left;">
-gene
-</th>
-<th style="text-align:left;">
-ASE
-</th>
-<th style="text-align:left;">
-no_ASE
-</th>
-<th style="text-align:left;">
-not_tested
-</th>
-</tr>
-</thead>
+<caption>The number of samples that were tested and showed ASE, tested and did not show ASE, or not tested at all for each differentially expressed gene in the Alzheimer's vs wildtype comparison</caption>
+ <thead>
+  <tr>
+   <th style="text-align:left;"> gene </th>
+   <th style="text-align:left;"> ASE </th>
+   <th style="text-align:left;"> no_ASE </th>
+   <th style="text-align:left;"> not_tested </th>
+  </tr>
+ </thead>
 <tbody>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000001993
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000020448
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-16
-</td>
-<td style="text-align:left;">
-8
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000056065
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000078322
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-18
-</td>
-<td style="text-align:left;">
-6
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000079324
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000088298
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-8
-</td>
-<td style="text-align:left;">
-16
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000088507
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-8
-</td>
-<td style="text-align:left;">
-16
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000092191
-</td>
-<td style="text-align:left;">
-1
-</td>
-<td style="text-align:left;">
-11
-</td>
-<td style="text-align:left;">
-12
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000093378
-</td>
-<td style="text-align:left;">
-5
-</td>
-<td style="text-align:left;">
-3
-</td>
-<td style="text-align:left;">
-16
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000094719
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-23
-</td>
-<td style="text-align:left;">
-1
-</td>
-</tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000001993 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 1 </td>
+   <td style="text-align:left;"> 23 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000018281 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000020448 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 16 </td>
+   <td style="text-align:left;"> 8 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000078322 </td>
+   <td style="text-align:left;"> 5 </td>
+   <td style="text-align:left;"> 19 </td>
+   <td style="text-align:left;"> 0 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000079324 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000088298 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 8 </td>
+   <td style="text-align:left;"> 16 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000092191 </td>
+   <td style="text-align:left;"> 2 </td>
+   <td style="text-align:left;"> 8 </td>
+   <td style="text-align:left;"> 14 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000093378 </td>
+   <td style="text-align:left;"> 5 </td>
+   <td style="text-align:left;"> 5 </td>
+   <td style="text-align:left;"> 14 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000094719 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 19 </td>
+   <td style="text-align:left;"> 5 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000099117 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 1 </td>
+   <td style="text-align:left;"> 23 </td>
+  </tr>
 </tbody>
 </table>
-<p><strong>Acne Inversa DE genes:</strong></p>
-<pre class="r"><code>deAseOverlap$fAI %&gt;%
+
+**Acne Inversa DE genes:**
+
+
+```r
+deAseOverlap$fAI %>%
   kable(
-    align = &quot;l&quot;,
+    align = "l",
     caption = paste(
-      &quot;The number of samples that were tested and showed ASE, tested and did&quot;,
-      &quot;not show ASE, or not tested at all for each differentially expressed&quot;,
-      &quot;gene in the Acne Inversa vs wildtype comparison&quot;
+      "The number of samples that were tested and showed ASE, tested and did",
+      "not show ASE, or not tested at all for each differentially expressed",
+      "gene in the Acne Inversa vs wildtype comparison"
     )
-  ) %&gt;%
+  ) %>%
   kable_styling(
-    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
-  )</code></pre>
+    bootstrap_options = c("striped", "hover", "condensed", "responsive")
+  )
+```
+
 <table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
-<caption>
-The number of samples that were tested and showed ASE, tested and did not show ASE, or not tested at all for each differentially expressed gene in the Acne Inversa vs wildtype comparison
-</caption>
-<thead>
-<tr>
-<th style="text-align:left;">
-gene
-</th>
-<th style="text-align:left;">
-ASE
-</th>
-<th style="text-align:left;">
-no_ASE
-</th>
-<th style="text-align:left;">
-not_tested
-</th>
-</tr>
-</thead>
+<caption>The number of samples that were tested and showed ASE, tested and did not show ASE, or not tested at all for each differentially expressed gene in the Acne Inversa vs wildtype comparison</caption>
+ <thead>
+  <tr>
+   <th style="text-align:left;"> gene </th>
+   <th style="text-align:left;"> ASE </th>
+   <th style="text-align:left;"> no_ASE </th>
+   <th style="text-align:left;"> not_tested </th>
+  </tr>
+ </thead>
 <tbody>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000004870
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-16
-</td>
-<td style="text-align:left;">
-8
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000005179
-</td>
-<td style="text-align:left;">
-5
-</td>
-<td style="text-align:left;">
-15
-</td>
-<td style="text-align:left;">
-4
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000061758
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000067665
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000094098
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
-<tr>
-<td style="text-align:left;">
-ENSDARG00000105453
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-0
-</td>
-<td style="text-align:left;">
-24
-</td>
-</tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000004870 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 18 </td>
+   <td style="text-align:left;"> 6 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000005179 </td>
+   <td style="text-align:left;"> 20 </td>
+   <td style="text-align:left;"> 4 </td>
+   <td style="text-align:left;"> 0 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000053240 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 3 </td>
+   <td style="text-align:left;"> 21 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000061758 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000067665 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000094098 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 24 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000101775 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 4 </td>
+   <td style="text-align:left;"> 20 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000105453 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 2 </td>
+   <td style="text-align:left;"> 22 </td>
+  </tr>
+  <tr>
+   <td style="text-align:left;"> ENSDARG00000117721 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 0 </td>
+   <td style="text-align:left;"> 24 </td>
+  </tr>
 </tbody>
 </table>
-<p>Unfortunately due to the large amounts of samples that could not be examined for overlap of DE and ASE data, no conclusions could be made regarding the ability for ASE to affect DE results.</p>
+
+Unfortunately due to the large amounts of samples that could not be examined for overlap of DE and ASE data, no conclusions could be made regarding the ability for ASE to affect DE results.
+-->
+</div>
 </div>
 <div id="enrichment-testing" class="section level1">
 <h1>Enrichment testing</h1>
@@ -2056,13 +2289,13 @@ ENSDARG00000105453
 <tbody>
 <tr class="odd">
 <td align="center"><strong>Chr 17</strong></td>
-<td align="center">17</td>
-<td align="center">323</td>
+<td align="center">18</td>
+<td align="center">428</td>
 </tr>
 <tr class="even">
 <td align="center"><strong>Not Chr 17</strong></td>
 <td align="center">453</td>
-<td align="center">7181</td>
+<td align="center">9086</td>
 </tr>
 </tbody>
 </table>
@@ -2083,7 +2316,7 @@ ENSDARG00000105453
     axis.text.x = element_blank(),
     axis.ticks.x = element_blank(),
     legend.position = &quot;bottom&quot;
-    ) +
+  ) +
   facet_wrap(~chr)</code></pre>
 <div class="figure" style="text-align: center">
 <img src="ase_analysis_files/figure-html/fisherTestPlot-1.png" alt="*Results from Fisher's exact test for enrichment of ASE genes by chromosome. The -log10(p-value) is show for each sample, which are coloured by genotype. Each chromosome is faceted for simpler viewing. The dotted line represents a p-value of 0.05. Samples satisfying a FDR-adjusted p-value of 0.05 show an asterix above the bar.*" width="768" />
@@ -2097,15 +2330,17 @@ ENSDARG00000105453
 <p>As an alternative approach, GSEA was performed using gene sets defined based on the chromosome each gene is located.</p>
 <p>The first step for performing GSEA involved creating a ranked list. The methodology that <code>GeneiASE</code> uses for calculating p-values posed two issues when constructing a ranked list:</p>
 <ol style="list-style-type: decimal">
-<li>Some p-values were 0
+<li>Some p-values were 0</li>
+</ol>
 <ul>
 <li>this causes issues when using -log10(p) as a stat for ranking the genes</li>
-</ul></li>
-<li>Sets of genes had equal p-values
+</ul>
+<ol start="2" style="list-style-type: decimal">
+<li>Sets of genes had equal p-values</li>
+</ol>
 <ul>
 <li>this causes problems the ordering of these genes is arbitrary</li>
-</ul></li>
-</ol>
+</ul>
 <pre class="r"><code>wilsonConf &lt;- function(p.vals, conf.level = 0.95){
   p &lt;- mean(p.vals)
   n &lt;- length(p.vals)
@@ -2227,7 +2462,10 @@ if (!file.exists(fgseaFile)) {
     ymax = -log10(lower),
     ymin = -log10(upper)
   ), width = 0.2) +
-  geom_text(aes(label = sigLabel), nudge_y = (-log10(meanRes$lower) - -log10(meanRes$mean.p)) + 0.1) +
+  geom_text(
+    aes(label = sigLabel),
+    nudge_y = -log10(meanRes$lower) - -log10(meanRes$mean.p) + 0.1
+  ) +
   geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;) +
   facet_wrap(~ chromosome) +
   theme(
@@ -2238,7 +2476,116 @@ if (!file.exists(fgseaFile)) {
   ) +
   scale_fill_manual(values = genoCols) +
   labs(y = log10plab)</code></pre>
-<p><img src="ase_analysis_files/figure-html/unnamed-chunk-11-1.png" width="768" style="display: block; margin: auto;" /></p>
+<p><img src="ase_analysis_files/figure-html/unnamed-chunk-34-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+<div id="genotype-level-gsea" class="section level2">
+<h2>Genotype level GSEA</h2>
+<pre class="r"><code>topASE_geno &lt;- bind_rows(topASE) %&gt;%
+  group_by(feat, genotype) %&gt;%
+  summarise(median.p = median(p.nom), .groups = &quot;drop&quot;) %&gt;%
+  dplyr::arrange(median.p) %&gt;%
+  split(f = .$genotype)</code></pre>
+<pre class="r"><code>permRanks_geno &lt;- function(x){
+  x[,c(&quot;feat&quot;, &quot;median.p&quot;)] %&gt;%
+    mutate(
+      median.p = ifelse(median.p == 0, 0.000001, median.p),
+      stat = -log10(median.p)
+    ) %&gt;%
+    split(f = .$stat) %&gt;%
+    lapply(function(x){
+      pull(x, feat) %&gt;%
+        sample(length(.), replace = FALSE)
+    }) %&gt;%
+    unlist(use.names = FALSE) %&gt;%
+    enframe(name = NULL, value = &quot;geneid&quot;) %&gt;%
+    mutate(stat = seq(1:nrow(.))) %&gt;%
+    with(structure(stat, names = geneid)) %&gt;%
+    rev()
+}</code></pre>
+<pre class="r"><code>perms &lt;- 500
+fgseaFile_geno &lt;- paste0(
+  here(),
+  &quot;/files/fgsea_geno_&quot;,
+  perms,
+  &quot;perms.Rds&quot;
+)</code></pre>
+<pre class="r"><code>## This code chunk has a lengthy run-time and will not run if the object has already been saved
+## Due to its large size the object remains on the HPC system
+## Across 6 threads it takes 1-2 hours to complete
+if (!file.exists(fgseaFile_geno)) {
+  plan(list(tweak(multisession, workers = cores), sequential))
+  ranks &lt;- future_sapply(1:perms, function(...){
+    future_sapply(topASE_geno, permRanks_geno, future.seed = 17)
+  }, future.seed = 17) %&gt;%
+    t() %&gt;%
+    as_tibble()
+  fgsea &lt;- future_lapply(as.list(ranks), function(x){
+    future_lapply(x, function(y){
+      fgseaMultilevel(chrGenes, y, scoreType = &quot;pos&quot;, eps = 0)
+    }, future.seed = 17)
+  }, future.seed = 17) %&gt;%
+    set_names(colnames(ranks))
+  saveRDS(fgsea, fgseaFile_geno)
+  plan(sequential)
+}</code></pre>
+<pre class="r"><code>fgsea_geno &lt;- readRDS(fgseaFile_geno)</code></pre>
+<pre class="r"><code>pvals_geno &lt;- lapply(fgsea_geno, function(x){
+  lapply(seq_along(x), function(y){
+    x[[y]][,c(&quot;pathway&quot;, &quot;padj&quot;)] %&gt;%
+      dplyr::rename(!!as.character(y) := padj)
+  }) %&gt;%
+    purrr::reduce(left_join) %&gt;%
+    column_to_rownames(&quot;pathway&quot;) %&gt;%
+    t() %&gt;%
+    as_tibble()
+})</code></pre>
+<pre class="r"><code>mean_geno &lt;- lapply(pvals_geno, function(sample){
+  chrList &lt;- as.list(sample)
+  lapply(seq_along(chrList), function(x){
+    chr &lt;- names(chrList)[x]
+    wilsonConf(chrList[[x]]) %&gt;%
+      mutate(chromosome = as.factor(chr))
+  }) %&gt;%
+    bind_rows() %&gt;%
+    dplyr::select(chromosome, everything()) %&gt;%
+    mutate(
+      adj.mean.p = p.adjust(mean.p, method = &quot;bonf&quot;),
+      adj.lower = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = &quot;lower&quot;),
+      adj.upper = bonfConf(adj.mean.p, n, length(adj.mean.p), limit = &quot;upper&quot;)
+    )
+}) </code></pre>
+<pre class="r"><code>meanRes_geno &lt;- lapply(seq_along(mean_geno), function(ind){
+  x &lt;- mean_geno[[ind]]
+  x %&gt;%
+    mutate(
+      genotype = names(mean_geno)[ind],
+      chromosome = fct_relevel(chromosome, str_sort(chromosome, numeric = TRUE)),
+      sigLabel = ifelse(adj.lower &lt; 0.05, &quot;*&quot;, &quot;&quot;)
+    )
+}) %&gt;%
+  bind_rows()</code></pre>
+<pre class="r"><code>meanRes_geno %&gt;%
+  ggplot(aes(genotype, -log10(mean.p), fill = genotype)) +
+  geom_bar(stat = &quot;identity&quot;, position = &quot;dodge&quot;, colour = &quot;black&quot;) +
+  geom_errorbar(aes(
+    ymax = -log10(lower),
+    ymin = -log10(upper)
+  ), width = 0.2) +
+  geom_text(
+    aes(label = sigLabel),
+    nudge_y = -log10(meanRes$lower) - -log10(meanRes$mean.p) + 0.1
+  ) +
+  geom_hline(yintercept = -log10(0.05), linetype = &quot;dashed&quot;) +
+  facet_wrap(~ chromosome) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.title.x = element_blank(),
+    legend.position = &quot;bottom&quot;
+  ) +
+  scale_fill_manual(values = genoCols) +
+  labs(y = log10plab)</code></pre>
+<p><img src="ase_analysis_files/figure-html/unnamed-chunk-43-1.png" width="768" style="display: block; margin: auto;" /></p>
 </div>
 </div>
 

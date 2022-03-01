@@ -1083,7 +1083,7 @@ if (!file.exists(path)) {
 ```{r}
 path <- here("files/aseRCByGene.Rds")
 if (!file.exists(path)) {
-  saveRDS(aseRC, path)
+  saveRDS(aseRCByGene, path)
 }
 ```
 

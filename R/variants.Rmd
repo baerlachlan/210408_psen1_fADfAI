@@ -147,7 +147,7 @@ drChrs <- seq(1:25)
 # DE data
 
 ```{r deData}
-topDE <- readRDS(file.path(projDir, "files/topTables.Rds")) %>%
+topDE <- readRDS(file.path(projDir, "files/topTables_cqn.Rds")) %>%
   set_names(c("fAD", "fAI"))
 ```
 
@@ -185,47 +185,47 @@ gt <- geno(vcf)$GT %>%
 ```
 
 ## Within groups
-
+<!--
 ```{r}
 gt_similarity <- lapply(samples_byGeno, function(samples){
-  gt_summary <- apply(gt[,samples], 1, function(x){
-    ## Sort the vector so that the "./." (no-call) genotype is always last
-    ## which.max() will therefore always return a called genotype if tied with a no-call
-    tab <- table(x) %>%
-      .[rev(sort(names(.)))]
-    gt_max <- names(which.max(tab))
-    n_max <- sum(x == gt_max)
-    n_called <- sum(x != "./.")
-    n_nocall <- sum(x == "./.")
-    tibble(
-      gt_max = gt_max,
-      n_max = n_max,
-      n_called = n_called,
-      n_nocall = n_nocall
-    )
-  }) %>%
-    bind_rows()
-  mcols(gr) <- gt_summary
-  gr %>%
-    plyranges::filter(gt_max != "./.") %>%  # Because of the above sort, this won't remove rows where n_nocall == most called genotype
-    plyranges::mutate(
-      percent = n_max / n_called,
-      cumsum = cumsum(percent),
-      lag = dplyr::lag(cumsum, n = 50, default = NA),
-      lead = dplyr::lead(cumsum, n = 50, default = NA),
-      window_sum = lead - lag,
-      window_ave = window_sum / 101
-    )
+gt_summary <- apply(gt[,samples], 1, function(x){
+## Sort the vector so that the "./." (no-call) genotype is always last
+## which.max() will therefore always return a called genotype if tied with a no-call
+tab <- table(x) %>%
+.[rev(sort(names(.)))]
+gt_max <- names(which.max(tab))
+n_max <- sum(x == gt_max)
+n_called <- sum(x != "./.")
+n_nocall <- sum(x == "./.")
+tibble(
+gt_max = gt_max,
+n_max = n_max,
+n_called = n_called,
+n_nocall = n_nocall
+)
+}) %>%
+bind_rows()
+mcols(gr) <- gt_summary
+gr %>%
+plyranges::filter(gt_max != "./.") %>%  # Because of the above sort, this won't remove rows where n_nocall == most called genotype
+plyranges::mutate(
+percent = n_max / n_called,
+cumsum = cumsum(percent),
+lag = dplyr::lag(cumsum, n = 50, default = NA),
+lead = dplyr::lead(cumsum, n = 50, default = NA),
+window_sum = lead - lag,
+window_ave = window_sum / 101
+)
 })
 ```
 
 ```{r}
 lapply(seq_along(gt_similarity), function(ind){
-  overlaps <- findOverlaps(gt_similarity[[ind]], gr)
-  colname <- names(gt_similarity[ind])
-  mcols(gr)[,colname] <<- NA
-  mcols(gr)[subjectHits(overlaps), colname] <<-
-    mcols(gt_similarity[[ind]])[queryHits(overlaps), "window_ave"]
+overlaps <- findOverlaps(gt_similarity[[ind]], gr)
+colname <- names(gt_similarity[ind])
+mcols(gr)[,colname] <<- NA
+mcols(gr)[subjectHits(overlaps), colname] <<-
+mcols(gt_similarity[[ind]])[queryHits(overlaps), "window_ave"]
 })
 ```
 
@@ -235,139 +235,175 @@ axis_track <- GenomeAxisTrack()
 
 ```{r}
 aTrack_alz <- genes[de_fAD] %>%
-  plyranges::filter(seqnames == "17") %>%
-  GeneRegionTrack(
-    name = "Alz DE",
-    transcriptAnnotation = "symbol",
-    fontcolor.group = 1,
-    cex.group = 0.5,
-    rotation.group = c(35, 35, 35, 0, 0)
-  )
+plyranges::filter(seqnames == "17") %>%
+GeneRegionTrack(
+name = "Alz DE",
+transcriptAnnotation = "symbol",
+fontcolor.group = 1,
+cex.group = 0.5,
+rotation.group = c(35, 35, 35, 0, 0)
+)
 dTrack_alz <- gr[,c("EOfAD-like/+", "WT")] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(
-    type = "l",
-    name = "Alzheimer's comparison",
-    window = -1,
-    windowSize = 1,
-    groups = c("EOfAD-like/+","WT"),
-    col = genoCols[c("EOfAD-like/+", "WT")],
-    baseline = c(0.5, 1)
-  )
+plyranges::filter(seqnames == "17") %>%
+DataTrack(
+type = "l",
+name = "Alzheimer's comparison",
+window = -1,
+windowSize = 1,
+groups = c("EOfAD-like/+","WT"),
+col = genoCols[c("EOfAD-like/+", "WT")],
+baseline = c(0.5, 1)
+)
 aTrack_acne <- genes[de_fAI] %>%
-  plyranges::filter(seqnames == "17") %>%
-  GeneRegionTrack(
-    name = "Acne DE",
-    transcriptAnnotation = "symbol",
-    fontcolor.group = 1,
-    cex.group = 0.5
-  )
+plyranges::filter(seqnames == "17") %>%
+GeneRegionTrack(
+name = "Acne DE",
+transcriptAnnotation = "symbol",
+fontcolor.group = 1,
+cex.group = 0.5
+)
 dTrack_acne <- gr[,c("fAI-like/+", "WT")] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(
-    type = "l",
-    name = "Acne Inversa Comparison",
-    window = -1,
-    windowSize = 1,
-    groups = c("fAI-like/+","WT"),
-    col = genoCols[c("fAI-like/+", "WT")]
-  )
+plyranges::filter(seqnames == "17") %>%
+DataTrack(
+type = "l",
+name = "Acne Inversa Comparison",
+window = -1,
+windowSize = 1,
+groups = c("fAI-like/+","WT"),
+col = genoCols[c("fAI-like/+", "WT")]
+)
 plotTracks(list(axis_track, aTrack_alz, dTrack_alz, aTrack_acne, dTrack_acne))
 ```
 
 ```{r}
 axis_track <- GenomeAxisTrack()
 aTrack_alz <- genes[de_fAD] %>%
-  plyranges::filter(seqnames == "6") %>%
-  GeneRegionTrack(
-    name = "Alz DE",
-    transcriptAnnotation = "symbol",
-    fontcolor.group = 1,
-    cex.group = 0.5,
-    rotation.group = c(35, 35, 35, 0, 0)
-  )
+plyranges::filter(seqnames == "6") %>%
+GeneRegionTrack(
+name = "Alz DE",
+transcriptAnnotation = "symbol",
+fontcolor.group = 1,
+cex.group = 0.5,
+rotation.group = c(35, 35, 35, 0, 0)
+)
 dTrack_alz <- gr[,c("EOfAD-like/+", "WT")] %>%
-  plyranges::filter(seqnames == "6") %>%
-  DataTrack(
-    type = "l",
-    name = "Alzheimer's comparison",
-    window = -1,
-    windowSize = 1,
-    groups = c("EOfAD-like/+","WT"),
-    col = genoCols[c("EOfAD-like/+", "WT")]
-  )
+plyranges::filter(seqnames == "6") %>%
+DataTrack(
+type = "l",
+name = "Alzheimer's comparison",
+window = -1,
+windowSize = 1,
+groups = c("EOfAD-like/+","WT"),
+col = genoCols[c("EOfAD-like/+", "WT")]
+)
 plotTracks(list(axis_track, aTrack_alz, dTrack_alz))
 ```
-
+-->
 ## Between groups
 
 ```{r}
-allele_stats <- lapply(samples_byGeno, function(samples){
-  apply(gt[,samples], 1, function(genos){
-    alleles <- genos %>%
-      as.character() %>%
-      str_split("/") %>%
-      unlist()
-    n_called <- sum(alleles != ".")
-    n_nocall <- sum(alleles == ".")
-    n_0 <- sum(alleles == "0")
-    n_1 <- sum(alleles == "1")
-    n_2 <- sum(alleles == "2")
-    tibble(
-      n_called = n_called,
-      n_nocall = n_nocall,
-      n_0 = n_0,
-      n_1 = n_1,
-      n_2 = n_2,
-    )
-  }) %>%
-    bind_rows()
-})
+allele_file <- file.path(here(), "files", "allele_stats.Rds")
+```
+
+```{r}
+## Takes 15-20 mins to run so .Rds saved for convenience
+if (!file.exists(allele_file)) {
+  allele_stats <- lapply(samples_byGeno, function(samples){
+    apply(gt[,samples], 1, function(genos){
+      alleles <- genos %>%
+        as.character() %>%
+        str_split("/") %>%
+        unlist()
+      n_called <- sum(alleles != ".")
+      n_nocall <- sum(alleles == ".")
+      n_0 <- sum(alleles == "0")
+      n_1 <- sum(alleles == "1")
+      n_2 <- sum(alleles == "2")
+      n_3 <- sum(alleles == "3")
+      tibble(
+        n_called = n_called,
+        n_nocall = n_nocall,
+        n_0 = n_0,
+        n_1 = n_1,
+        n_2 = n_2,
+        n_3 = n_3,
+      )
+    }) %>%
+      bind_rows()
+  })
+  saveRDS(object = allele_stats, file = allele_file)
+} else {
+  allele_stats <- readRDS(allele_file)
+}
 ```
 
 ```{r}
 allele_props <- lapply(allele_stats, function(x){
-  mutate(x, prop_ref = ifelse(n_called > n_nocall, n_0 / n_called, NA))
+  x %>%
+    mutate(
+      prop_ref = ifelse(n_called > n_nocall, n_0 / n_called, NA),
+      prop_called = n_called / (n_called + n_nocall)
+    )
 })
 ```
 
 ### EOfAD
 
 ```{r}
-tmp <- gr
-tmp$comp <- abs(allele_props$`EOfAD-like/+`$prop_ref - allele_props$WT$prop_ref)
-tmp <- plyranges::filter(tmp, !is.na(comp))
-```
-
-```{r}
-axis_track <- GenomeAxisTrack()
-window <- 200
-aTrack_alz <- genes[de_fAD] %>%
-  plyranges::filter(seqnames == "17") %>%
-  GeneRegionTrack(
-    name = "Alz DE",
-    transcriptAnnotation = "symbol",
-    fontcolor.group = 1,
-    cex.group = 0.5,
-    rotation.group = c(35, 35, 35, 0, 0)
-  )
-dTrack_alz <- tmp %>%
+window <- 20
+gr_alz <- gr
+gr_alz$comp <- abs(allele_props$`EOfAD-like/+`$prop_ref - allele_props$WT$prop_ref)
+gr_alz$qual_ave <- (allele_props$`EOfAD-like/+`$prop_called + allele_props$WT$prop_called) / 2
+gr_alz <- plyranges::filter(gr_alz, !is.na(comp)) %>%
   plyranges::mutate(
     cumsum = cumsum(comp),
     lag = dplyr::lag(cumsum, n = window / 2, default = NA),
     lead = dplyr::lead(cumsum, n = window / 2, default = NA),
     window_sum = lead - lag,
-    window_ave = window_sum / (window + 1)
+    comp_window = window_sum / (window + 1)
   ) %>%
   plyranges::select(-c(comp, cumsum, lag, lead, window_sum)) %>%
+  plyranges::mutate(
+    cumsum = cumsum(qual_ave),
+    lag = dplyr::lag(cumsum, n = window / 2, default = NA),
+    lead = dplyr::lead(cumsum, n = window / 2, default = NA),
+    window_sum = lead - lag,
+    qual_window = window_sum / (window + 1)
+  ) %>%
+  plyranges::select(-c(qual_ave, cumsum, lag, lead, window_sum))
+```
+
+```{r}
+axis_track <- GenomeAxisTrack()
+geneTrack_alz <- genes[de_fAD] %>%
+  plyranges::filter(seqnames == "17") %>%
+  GeneRegionTrack(
+    name = "DE genes",
+    transcriptAnnotation = "gene_name",
+    showTranscriptId = TRUE,
+    fontcolor.group = 1,
+    cex.group = 0.5,
+    rotation.group = c(35, 35, 35, 0, 0)
+  )
+variationTrack_alz <- gr_alz[,"comp_window"] %>%
   plyranges::filter(seqnames == "17") %>%
   DataTrack(
     type = "l",
-    name = "Alzheimer's comparison",
+    name = "Allelic variation Alz vs WT",
     window = -1,
     windowSize = 1,
   )
-plotTracks(list(axis_track, aTrack_alz, dTrack_alz))
+qual_track <- gr_alz[,"qual_window"] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(
+    type = "l",
+    name = "Quality",
+    group = c("qual_alz", "qual_wt"),
+    window = -1,
+    windowSize = 1,
+    color = "black"
+  )
+plotTracks(list(axis_track, geneTrack_alz, variationTrack_alz, qual_track))
 ```
 
 ### fAI
@@ -396,7 +432,7 @@ dTrack_alz <- tmp %>%
     lag = dplyr::lag(cumsum, n = window / 2, default = NA),
     lead = dplyr::lead(cumsum, n = window / 2, default = NA),
     window_sum = lead - lag,
-    window_ave = window_sum / (window + 1)
+    comp_window = window_sum / (window + 1)
   ) %>%
   plyranges::select(-c(comp, cumsum, lag, lead, window_sum)) %>%
   plyranges::filter(seqnames == "17") %>%

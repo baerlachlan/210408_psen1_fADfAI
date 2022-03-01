@@ -242,7 +242,7 @@ nASE %>%
 Previously analysed different expression testing results were loaded as a list of topTables.
 
 ```{r deData}
-topDE <- readRDS(file.path(projDir, "files/topTables.Rds")) %>%
+topDE <- readRDS(file.path(projDir, "files/topTables_cqn.Rds")) %>%
   set_names(c("fAD", "fAI"))
 ```
 
@@ -598,6 +598,7 @@ metrics$fAD %>%
 metrics$fAD %>% dplyr::filter(gene_name == "col12a1a") %>% dplyr::arrange(genotype) %>% print(n=Inf)
 ```
 
+<!--
 **Alzheimer's DE genes:**
 
 ```{r overlapfAD}
@@ -633,6 +634,7 @@ deAseOverlap$fAI %>%
 ```
 
 Unfortunately due to the large amounts of samples that could not be examined for overlap of DE and ASE data, no conclusions could be made regarding the ability for ASE to affect DE results.
+-->
 
 # Enrichment testing
 
