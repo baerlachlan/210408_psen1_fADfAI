@@ -50,6 +50,7 @@ suppressPackageStartupMessages({
   ## Project specific
   library(VariantAnnotation)
   library(Gviz)
+  library(zoo)
 })
 ```
 
@@ -350,36 +351,26 @@ allele_props <- lapply(allele_stats, function(x){
 ### EOfAD
 
 ```{r}
-window <- 20
+window <- 101
 gr_alz <- gr
 gr_alz$comp <- abs(allele_props$`EOfAD-like/+`$prop_ref - allele_props$WT$prop_ref)
 gr_alz$qual_ave <- (allele_props$`EOfAD-like/+`$prop_called + allele_props$WT$prop_called) / 2
 gr_alz <- plyranges::filter(gr_alz, !is.na(comp)) %>%
   plyranges::mutate(
-    cumsum = cumsum(comp),
-    lag = dplyr::lag(cumsum, n = window / 2, default = NA),
-    lead = dplyr::lead(cumsum, n = window / 2, default = NA),
-    window_sum = lead - lag,
-    comp_window = window_sum / (window + 1)
+    comp_window = rollmean(comp, k = window, fill = NA),
+    qual_window = rollmean(qual_ave, k = window, fill = NA),
   ) %>%
-  plyranges::select(-c(comp, cumsum, lag, lead, window_sum)) %>%
-  plyranges::mutate(
-    cumsum = cumsum(qual_ave),
-    lag = dplyr::lag(cumsum, n = window / 2, default = NA),
-    lead = dplyr::lead(cumsum, n = window / 2, default = NA),
-    window_sum = lead - lag,
-    qual_window = window_sum / (window + 1)
-  ) %>%
-  plyranges::select(-c(qual_ave, cumsum, lag, lead, window_sum))
+  plyranges::select(-c(comp, qual_ave))
 ```
 
 ```{r}
 axis_track <- GenomeAxisTrack()
 geneTrack_alz <- genes[de_fAD] %>%
   plyranges::filter(seqnames == "17") %>%
+  plyranges::mutate(symbol = gene_name) %>%
   GeneRegionTrack(
     name = "DE genes",
-    transcriptAnnotation = "gene_name",
+    transcriptAnnotation = "symbol",
     showTranscriptId = TRUE,
     fontcolor.group = 1,
     cex.group = 0.5,
@@ -393,55 +384,73 @@ variationTrack_alz <- gr_alz[,"comp_window"] %>%
     window = -1,
     windowSize = 1,
   )
-qual_track <- gr_alz[,"qual_window"] %>%
+qualTrack_alz <- gr_alz[,"qual_window"] %>%
   plyranges::filter(seqnames == "17") %>%
   DataTrack(
     type = "l",
     name = "Quality",
-    group = c("qual_alz", "qual_wt"),
     window = -1,
     windowSize = 1,
     color = "black"
   )
-plotTracks(list(axis_track, geneTrack_alz, variationTrack_alz, qual_track))
+plotTracks(list(axis_track, geneTrack_alz, variationTrack_alz, qualTrack_alz))
 ```
 
 ### fAI
 
 ```{r}
-tmp <- gr
-tmp$comp <- abs(allele_props$`fAI-like/+`$prop_ref - allele_props$WT$prop_ref)
-tmp <- plyranges::filter(tmp, !is.na(comp))
+window <- 101
+gr_acne <- gr
+gr_acne$comp <- abs(allele_props$`fAI-like/+`$prop_ref - allele_props$WT$prop_ref)
+gr_acne$qual_ave <- (allele_props$`fAI-like/+`$prop_called + allele_props$WT$prop_called) / 2
+gr_acne <- plyranges::filter(gr_acne, !is.na(comp)) %>%
+  plyranges::mutate(
+    comp_window = rollmean(comp, k = window, fill = NA),
+    qual_window = rollmean(qual_ave, k = window, fill = NA),
+  ) %>%
+  plyranges::select(-c(comp, qual_ave))
 ```
 
 ```{r}
 axis_track <- GenomeAxisTrack()
-window <- 200
-aTrack_alz <- genes[de_fAI] %>%
+geneTrack_acne <- genes[de_fAI] %>%
   plyranges::filter(seqnames == "17") %>%
+  plyranges::mutate(symbol = gene_name) %>%
   GeneRegionTrack(
-    name = "Alz DE",
+    name = "DE genes",
     transcriptAnnotation = "symbol",
+    showTranscriptId = TRUE,
     fontcolor.group = 1,
     cex.group = 0.5,
     rotation.group = c(35, 35, 35, 0, 0)
   )
-dTrack_alz <- tmp %>%
-  plyranges::mutate(
-    cumsum = cumsum(comp),
-    lag = dplyr::lag(cumsum, n = window / 2, default = NA),
-    lead = dplyr::lead(cumsum, n = window / 2, default = NA),
-    window_sum = lead - lag,
-    comp_window = window_sum / (window + 1)
-  ) %>%
-  plyranges::select(-c(comp, cumsum, lag, lead, window_sum)) %>%
+variationTrack_acne <- gr_acne[,"comp_window"] %>%
   plyranges::filter(seqnames == "17") %>%
   DataTrack(
     type = "l",
-    name = "Alzheimer's comparison",
+    name = "Allelic variation Acne vs WT",
     window = -1,
     windowSize = 1,
-    grid = TRUE
   )
-plotTracks(list(axis_track, aTrack_alz, dTrack_alz))
+qualTrack_acne <- gr_acne[,"qual_window"] %>%
+  plyranges::filter(seqnames == "17") %>%
+  DataTrack(
+    type = "l",
+    name = "Quality",
+    window = -1,
+    windowSize = 1,
+    color = "black"
+  )
+plotTracks(list(axis_track, geneTrack_acne, variationTrack_acne, qualTrack_acne))
 ```
+
+Circos plot:
+  - cube root the dissimilarity metric
+  - plot absolute logFC
+  
+Look at regulatory TFT datasets
+
+Try quasi likelihood for DE testing
+
+The window is called an elastic window
+  - Give a summary of window sizes
