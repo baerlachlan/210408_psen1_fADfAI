@@ -13,7 +13,7 @@ rule align_pe:
         bname = os.path.join("results", align_dir, "bam", "{SAMPLE}"),
         bamUnsorted = os.path.join("results", align_dir, "bam", "{SAMPLE}Aligned.out.bam"),
         align_dir = align_dir,
-        extra = conig["align"]["extra"],
+        extra = config["align"]["extra"],
     conda:
         "../envs/align.yml"
     resources:

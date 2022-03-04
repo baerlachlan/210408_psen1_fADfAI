@@ -2,13 +2,13 @@ rule merge_fastq:
     input:
         fq = expand(
             os.path.join(
-                "results", raw_dir, "fastq", "{{SAMPLE}}{MERGETAG}{{PAIRTAG}}" + config["fastq_ext"]
+                "results", raw_dir, "fastq", "{{SAMPLE}}{MERGETAG}{{PAIRTAG, .*}}" + config["fastq_ext"]
             ),
             MERGETAG=config["merge_fastq"]["tags"]
         ),
     output:
         fq = temp(os.path.join(
-            "results", merge_dir, "fastq", "{SAMPLE}{PAIRTAG}" + config["fastq_ext"]
+            "results", merge_dir, "fastq", "{SAMPLE}{PAIRTAG, .*}" + config["fastq_ext"]
         )),
     resources:
         cpu = 1,

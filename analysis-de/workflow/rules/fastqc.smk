@@ -1,8 +1,8 @@
 rule fastqc_raw:
     input:
-        os.path.join("results", raw_dir, "fastq", "{SAMPLE}{MERGETAG}{PAIRTAG}" + config["fastq_ext"]),
+        os.path.join("results", raw_dir, "fastq", "{SAMPLE}{MERGETAG, .*}{PAIRTAG, .*}" + config["fastq_ext"]),
     output:
-        multiext(os.path.join("results", raw_dir, "FastQC", "{SAMPLE}{MERGETAG}{PAIRTAG}_fastqc"), ".zip", ".html"),
+        multiext(os.path.join("results", raw_dir, "FastQC", "{SAMPLE}{MERGETAG, .*}{PAIRTAG, .*}_fastqc"), ".zip", ".html"),
     params:
         outDir = os.path.join("results", raw_dir, "FastQC"),
     conda:
@@ -20,9 +20,9 @@ rule fastqc_raw:
 
 rule fastqc_trim:
     input:
-        os.path.join("results", trim_dir, "fastq", "{SAMPLE}{PAIRTAG}" + config["fastq_ext"]),
+        os.path.join("results", trim_dir, "fastq", "{SAMPLE}{PAIRTAG, .*}" + config["fastq_ext"]),
     output:
-        multiext(os.path.join("results", trim_dir, "FastQC", "{SAMPLE}{PAIRTAG}_fastqc"), ".zip", ".html"),
+        multiext(os.path.join("results", trim_dir, "FastQC", "{SAMPLE}{PAIRTAG, .*}_fastqc"), ".zip", ".html"),
     params:
         outDir = os.path.join("results", trim_dir, "FastQC"),
     conda:
