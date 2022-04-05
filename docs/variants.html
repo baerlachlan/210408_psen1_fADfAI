@@ -1,0 +1,1266 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+
+<meta name="author" content="Lachlan Baer" />
+
+
+<title>Variants Analysis</title>
+
+<script src="site_libs/header-attrs-2.11/header-attrs.js"></script>
+<script src="site_libs/jquery-3.6.0/jquery-3.6.0.min.js"></script>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="site_libs/bootstrap-3.3.5/css/flatly.min.css" rel="stylesheet" />
+<script src="site_libs/bootstrap-3.3.5/js/bootstrap.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/html5shiv.min.js"></script>
+<script src="site_libs/bootstrap-3.3.5/shim/respond.min.js"></script>
+<style>h1 {font-size: 34px;}
+       h1.title {font-size: 38px;}
+       h2 {font-size: 30px;}
+       h3 {font-size: 24px;}
+       h4 {font-size: 18px;}
+       h5 {font-size: 16px;}
+       h6 {font-size: 12px;}
+       code {color: inherit; background-color: rgba(0, 0, 0, 0.04);}
+       pre:not([class]) { background-color: white }</style>
+<script src="site_libs/jqueryui-1.11.4/jquery-ui.min.js"></script>
+<link href="site_libs/tocify-1.9.1/jquery.tocify.css" rel="stylesheet" />
+<script src="site_libs/tocify-1.9.1/jquery.tocify.js"></script>
+<script src="site_libs/navigation-1.1/tabsets.js"></script>
+<script src="site_libs/navigation-1.1/codefolding.js"></script>
+<link href="site_libs/highlightjs-9.12.0/textmate.css" rel="stylesheet" />
+<script src="site_libs/highlightjs-9.12.0/highlight.js"></script>
+<script src="site_libs/kePrint-0.0.1/kePrint.js"></script>
+<link href="site_libs/lightable-0.0.1/lightable.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/all.css" rel="stylesheet" />
+<link href="site_libs/font-awesome-5.1.0/css/v4-shims.css" rel="stylesheet" />
+
+<style type="text/css">
+  code{white-space: pre-wrap;}
+  span.smallcaps{font-variant: small-caps;}
+  span.underline{text-decoration: underline;}
+  div.column{display: inline-block; vertical-align: top; width: 50%;}
+  div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+  ul.task-list{list-style: none;}
+    </style>
+
+<style type="text/css">code{white-space: pre;}</style>
+<script type="text/javascript">
+if (window.hljs) {
+  hljs.configure({languages: []});
+  hljs.initHighlightingOnLoad();
+  if (document.readyState && document.readyState === "complete") {
+    window.setTimeout(function() { hljs.initHighlighting(); }, 0);
+  }
+}
+</script>
+
+
+
+
+
+<link rel="stylesheet" href="styles.css" type="text/css" />
+
+
+
+<style type = "text/css">
+.main-container {
+  max-width: 940px;
+  margin-left: auto;
+  margin-right: auto;
+}
+img {
+  max-width:100%;
+}
+.tabbed-pane {
+  padding-top: 12px;
+}
+.html-widget {
+  margin-bottom: 20px;
+}
+button.code-folding-btn:focus {
+  outline: none;
+}
+summary {
+  display: list-item;
+}
+pre code {
+  padding: 0;
+}
+</style>
+
+
+<style type="text/css">
+.dropdown-submenu {
+  position: relative;
+}
+.dropdown-submenu>.dropdown-menu {
+  top: 0;
+  left: 100%;
+  margin-top: -6px;
+  margin-left: -1px;
+  border-radius: 0 6px 6px 6px;
+}
+.dropdown-submenu:hover>.dropdown-menu {
+  display: block;
+}
+.dropdown-submenu>a:after {
+  display: block;
+  content: " ";
+  float: right;
+  width: 0;
+  height: 0;
+  border-color: transparent;
+  border-style: solid;
+  border-width: 5px 0 5px 5px;
+  border-left-color: #cccccc;
+  margin-top: 5px;
+  margin-right: -10px;
+}
+.dropdown-submenu:hover>a:after {
+  border-left-color: #adb5bd;
+}
+.dropdown-submenu.pull-left {
+  float: none;
+}
+.dropdown-submenu.pull-left>.dropdown-menu {
+  left: -100%;
+  margin-left: 10px;
+  border-radius: 6px 0 6px 6px;
+}
+</style>
+
+<script type="text/javascript">
+// manage active state of menu based on current page
+$(document).ready(function () {
+  // active menu anchor
+  href = window.location.pathname
+  href = href.substr(href.lastIndexOf('/') + 1)
+  if (href === "")
+    href = "index.html";
+  var menuAnchor = $('a[href="' + href + '"]');
+
+  // mark it active
+  menuAnchor.tab('show');
+
+  // if it's got a parent navbar menu mark it active as well
+  menuAnchor.closest('li.dropdown').addClass('active');
+
+  // Navbar adjustments
+  var navHeight = $(".navbar").first().height() + 15;
+  var style = document.createElement('style');
+  var pt = "padding-top: " + navHeight + "px; ";
+  var mt = "margin-top: -" + navHeight + "px; ";
+  var css = "";
+  // offset scroll position for anchor links (for fixed navbar)
+  for (var i = 1; i <= 6; i++) {
+    css += ".section h" + i + "{ " + pt + mt + "}\n";
+  }
+  style.innerHTML = "body {" + pt + "padding-bottom: 40px; }\n" + css;
+  document.head.appendChild(style);
+});
+</script>
+
+<!-- tabsets -->
+
+<style type="text/css">
+.tabset-dropdown > .nav-tabs {
+  display: inline-table;
+  max-height: 500px;
+  min-height: 44px;
+  overflow-y: auto;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.tabset-dropdown > .nav-tabs > li.active:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li.active:before {
+  content: "&#xe258;";
+  border: none;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open:before {
+  content: "";
+  font-family: 'Glyphicons Halflings';
+  display: inline-block;
+  padding: 10px;
+  border-right: 1px solid #ddd;
+}
+
+.tabset-dropdown > .nav-tabs > li.active {
+  display: block;
+}
+
+.tabset-dropdown > .nav-tabs > li > a,
+.tabset-dropdown > .nav-tabs > li > a:focus,
+.tabset-dropdown > .nav-tabs > li > a:hover {
+  border: none;
+  display: inline-block;
+  border-radius: 4px;
+  background-color: transparent;
+}
+
+.tabset-dropdown > .nav-tabs.nav-tabs-open > li {
+  display: block;
+  float: none;
+}
+
+.tabset-dropdown > .nav-tabs > li {
+  display: none;
+}
+</style>
+
+<!-- code folding -->
+<style type="text/css">
+.code-folding-btn { margin-bottom: 4px; }
+</style>
+
+
+
+<style type="text/css">
+
+#TOC {
+  margin: 25px 0px 20px 0px;
+}
+@media (max-width: 768px) {
+#TOC {
+  position: relative;
+  width: 100%;
+}
+}
+
+@media print {
+.toc-content {
+  /* see https://github.com/w3c/csswg-drafts/issues/4434 */
+  float: right;
+}
+}
+
+.toc-content {
+  padding-left: 30px;
+  padding-right: 40px;
+}
+
+div.main-container {
+  max-width: 1200px;
+}
+
+div.tocify {
+  width: 20%;
+  max-width: 260px;
+  max-height: 85%;
+}
+
+@media (min-width: 768px) and (max-width: 991px) {
+  div.tocify {
+    width: 25%;
+  }
+}
+
+@media (max-width: 767px) {
+  div.tocify {
+    width: 100%;
+    max-width: none;
+  }
+}
+
+.tocify ul, .tocify li {
+  line-height: 20px;
+}
+
+.tocify-subheader .tocify-item {
+  font-size: 0.90em;
+}
+
+.tocify .list-group-item {
+  border-radius: 0px;
+}
+
+
+</style>
+
+
+
+</head>
+
+<body>
+
+
+<div class="container-fluid main-container">
+
+
+<!-- setup 3col/9col grid for toc_float and main content  -->
+<div class="row">
+<div class="col-xs-12 col-sm-4 col-md-3">
+<div id="TOC" class="tocify">
+</div>
+</div>
+
+<div class="toc-content col-xs-12 col-sm-8 col-md-9">
+
+
+
+
+<div class="navbar navbar-default  navbar-fixed-top" role="navigation">
+  <div class="container">
+    <div class="navbar-header">
+      <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+      <a class="navbar-brand" href="index.html">210408_psen1_fADfAI_snv</a>
+    </div>
+    <div id="navbar" class="navbar-collapse collapse">
+      <ul class="nav navbar-nav">
+        <li>
+  <a href="index.html">Home</a>
+</li>
+<li>
+  <a href="de_analysis.html">DE analysis</a>
+</li>
+<li>
+  <a href="de_enrichment.html">DE enrichment</a>
+</li>
+<li>
+  <a href="ase_qc.html">ASE QC</a>
+</li>
+<li>
+  <a href="ase_analysis.html">ASE analysis</a>
+</li>
+      </ul>
+      <ul class="nav navbar-nav navbar-right">
+        <li>
+  <a href="https://github.com/baerlachlan/210408_psen1_fADfAI_snv">
+    <span class="fa fa-github"></span>
+     
+  </a>
+</li>
+      </ul>
+    </div><!--/.nav-collapse -->
+  </div><!--/.container -->
+</div><!--/.navbar -->
+
+<div id="header">
+
+<div class="btn-group pull-right float-right">
+<button type="button" class="btn btn-default btn-xs btn-secondary btn-sm dropdown-toggle" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false"><span>Code</span> <span class="caret"></span></button>
+<ul class="dropdown-menu dropdown-menu-right" style="min-width: 50px;">
+<li><a id="rmd-show-all-code" href="#">Show All Code</a></li>
+<li><a id="rmd-hide-all-code" href="#">Hide All Code</a></li>
+</ul>
+</div>
+
+
+
+<h1 class="title toc-ignore">Variants Analysis</h1>
+<h3 class="subtitle">210408_psen1_fADfAI dataset</h3>
+<h4 class="author">Lachlan Baer</h4>
+<h4 class="date">05 April, 2022</h4>
+
+</div>
+
+
+<div id="setup" class="section level1">
+<h1>Setup</h1>
+<pre class="r"><code>suppressPackageStartupMessages({
+  ## Common
+  library(tidyverse)
+  library(magrittr)
+  library(future.apply)
+  library(here)
+  library(AnnotationHub)
+  library(purrr)
+  library(scales)
+  library(kableExtra)
+  library(tictoc)
+  library(ggrepel)
+  library(RColorBrewer)
+  library(ggpubr)
+  library(pander)
+  library(rmarkdown)
+  ## Project specific
+  library(VariantAnnotation)
+  library(Gviz)
+  library(zoo)
+  library(msigdbr)
+  library(viridis)
+})</code></pre>
+<pre class="r"><code>if (interactive()) setwd(here::here())
+theme_set(theme_bw())
+cores &lt;- availableCores() - 1</code></pre>
+<pre class="r"><code>source(&quot;~/bioinformatics/bioToolkit/lbFuncs.R&quot;)</code></pre>
+<pre class="r"><code>## Choose either local or remote project directory
+# projDir &lt;- here()
+projDir &lt;- &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI&quot;</code></pre>
+<pre class="r"><code>options(ucscChromosomeNames = FALSE)</code></pre>
+<div id="ensdb" class="section level2">
+<h2>EnsDb</h2>
+<pre class="r"><code>ens_species &lt;- &quot;Danio rerio&quot;
+ens_release &lt;- &quot;101&quot;
+ens_assembly &lt;- &quot;GRCz11&quot;</code></pre>
+<pre class="r"><code>ah &lt;- AnnotationHub() %&gt;%
+  subset(species == ens_species) %&gt;%
+  subset(rdataclass == &quot;EnsDb&quot;)
+ahId &lt;- ah$ah_id[str_detect(ah$title, ens_release)]
+ensDb &lt;- ah[[ahId]]</code></pre>
+<pre class="r"><code>chrInfo &lt;- getChromInfoFromEnsembl(ens_assembly, release = ens_release) %&gt;%
+  dplyr::filter(coord_system == &quot;chromosome&quot;)
+primary_chrs &lt;- chrInfo$name</code></pre>
+<pre class="r"><code>genes &lt;- genes(ensDb, filter = SeqNameFilter(primary_chrs))
+mcols(genes) &lt;- mcols(genes)[
+  c(&quot;gene_id&quot;, &quot;gene_name&quot;, &quot;gene_biotype&quot;, &quot;entrezid&quot;)
+]</code></pre>
+<pre class="r"><code>exons &lt;- exonsBy(ensDb, by = &quot;gene&quot;, filter = SeqNameFilter(primary_chrs))</code></pre>
+</div>
+<div id="metadata" class="section level2">
+<h2>Metadata</h2>
+<pre class="r"><code>metadata &lt;- read_csv(file.path(projDir, &quot;files/samples.csv&quot;)) %&gt;%
+  dplyr::select(-sample) %&gt;%
+  mutate(
+    Genotype = factor(Genotype, levels = unique(Genotype)),
+    basename = factor(basename, levels = basename),
+    alias = c(
+      paste0(rep(&quot;fAD&quot;, 7), seq(1, 7)),
+      paste0(rep(&quot;fAI&quot;, 8), seq(1, 8)),
+      paste0(rep(&quot;wt&quot;, 9), seq(1, 9))
+    )
+  ) %&gt;%
+  dplyr::select(sample = basename, fish_id, batch_killed, sex = Sex, RINe,
+                genotype = Genotype, genotype_2 = Genotype_2, alias)
+metadata %&gt;%
+  dplyr::select(
+    Sample = sample, Genotype = genotype, Alias = alias, Gender = sex,
+    `Fish ID` = fish_id, `Batch Killed` = batch_killed
+  ) %&gt;%
+  kable(
+    align = &quot;l&quot;,
+    caption = &quot;Sample metadata&quot;
+  ) %&gt;%
+  kable_styling(
+    bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;, &quot;responsive&quot;)
+  )</code></pre>
+<table class="table table-striped table-hover table-condensed table-responsive" style="margin-left: auto; margin-right: auto;">
+<caption>
+Sample metadata
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+Sample
+</th>
+<th style="text-align:left;">
+Genotype
+</th>
+<th style="text-align:left;">
+Alias
+</th>
+<th style="text-align:left;">
+Gender
+</th>
+<th style="text-align:left;">
+Fish ID
+</th>
+<th style="text-align:left;">
+Batch Killed
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+7_KB_B12
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD1
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+27
+</td>
+<td style="text-align:left;">
+6
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+22_KB_C6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD2
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+30
+</td>
+<td style="text-align:left;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+16_KB_C12
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD3
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+40
+</td>
+<td style="text-align:left;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+8_KB_B3
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD4
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+46
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+19_KB_C3
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD5
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+29
+</td>
+<td style="text-align:left;">
+6
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+10_KB_B6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD6
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+50
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+4_KB_A6
+</td>
+<td style="text-align:left;">
+EOfAD-like/+
+</td>
+<td style="text-align:left;">
+fAD7
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+9
+</td>
+<td style="text-align:left;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+2_KB_A11
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI1
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+12
+</td>
+<td style="text-align:left;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+12_KB_B8
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI2
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+22
+</td>
+<td style="text-align:left;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+15_KB_C11
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI3
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+45
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+18_KB_C2
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI4
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+47
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+9_KB_B5
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI5
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+21
+</td>
+<td style="text-align:left;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+6_KB_B11
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI6
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+26
+</td>
+<td style="text-align:left;">
+6
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+24_KB_C8
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI7
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+44
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+21_KB_C5
+</td>
+<td style="text-align:left;">
+fAI-like/+
+</td>
+<td style="text-align:left;">
+fAI8
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+49
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+5_KB_A7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt1
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+19
+</td>
+<td style="text-align:left;">
+4
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+1_KB_A10
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt2
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+25
+</td>
+<td style="text-align:left;">
+5
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+23_KB_C7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt3
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+36
+</td>
+<td style="text-align:left;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+3_KB_A1
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt4
+</td>
+<td style="text-align:left;">
+F
+</td>
+<td style="text-align:left;">
+4
+</td>
+<td style="text-align:left;">
+1
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+17_KB_C1
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt5
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+34
+</td>
+<td style="text-align:left;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+20_KB_C4
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt6
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+35
+</td>
+<td style="text-align:left;">
+7
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+14_KB_C10
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt7
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+37
+</td>
+<td style="text-align:left;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+13_KB_B9
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt8
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+54
+</td>
+<td style="text-align:left;">
+10
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+11_KB_B7
+</td>
+<td style="text-align:left;">
+WT
+</td>
+<td style="text-align:left;">
+wt9
+</td>
+<td style="text-align:left;">
+M
+</td>
+<td style="text-align:left;">
+55
+</td>
+<td style="text-align:left;">
+10
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>genoCols &lt;- metadata$genotype %&gt;%
+  levels() %&gt;%
+  length() %&gt;%
+  brewer.pal(&quot;Set1&quot;) %&gt;%
+  setNames(levels(metadata$genotype))
+compCols &lt;- genoCols[1:2]</code></pre>
+<pre class="r"><code>samples_byGeno &lt;- metadata %&gt;%
+  split(f = .$genotype) %&gt;%
+  sapply(function(x){
+    pull(x, sample) %&gt;%
+      droplevels()
+  }, simplify = FALSE)
+alz_samples &lt;- metadata[metadata$genotype == &quot;EOfAD-like/+&quot;,]$sample %&gt;%
+  droplevels()
+acne_samples &lt;- metadata[metadata$genotype == &quot;fAI-like/+&quot;,]$sample %&gt;%
+  droplevels()
+wt_samples &lt;- metadata[metadata$genotype == &quot;WT&quot;,]$sample %&gt;%
+  droplevels()</code></pre>
+</div>
+</div>
+<div id="de-data" class="section level1">
+<h1>DE data</h1>
+<pre class="r"><code>topDE &lt;- readRDS(file.path(projDir, &quot;files/topTables_cqn.Rds&quot;)) %&gt;%
+  set_names(c(&quot;fAD&quot;, &quot;fAI&quot;))</code></pre>
+<pre class="r"><code>deGenes &lt;- sapply(topDE, dplyr::filter, DE, simplify = FALSE)</code></pre>
+</div>
+<div id="variation" class="section level1">
+<h1>Variation</h1>
+<pre class="r"><code>vcf_file &lt;- file.path(
+  &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI&quot;,
+  &quot;analysis-variants/10_variants/6_select/all_samples.vcf.gz&quot;
+)
+svp &lt;- ScanVcfParam(info = &quot;&quot;, geno = c(&quot;GT&quot;, &quot;GQ&quot;))
+vcf &lt;- suppressWarnings({
+  readVcf(vcf_file, param = svp)
+})</code></pre>
+<pre class="r"><code>gr &lt;- rowRanges(vcf)
+mcols(gr) &lt;- NULL
+gr &lt;- gr %&gt;%
+  as.data.frame() %&gt;%
+  droplevels() %&gt;%
+  GRanges()</code></pre>
+<pre class="r"><code>unphase_GTs &lt;- function(x){
+  str_replace(x, &quot;\\|&quot;, &quot;\\/&quot;)
+}
+gt &lt;- geno(vcf)$GT %&gt;%
+  as.data.frame() %&gt;%
+  mutate(across(everything(), unphase_GTs))</code></pre>
+<div id="between-groups" class="section level2">
+<h2>Between groups</h2>
+<div id="allelic-dissimilarity" class="section level3">
+<h3>Allelic dissimilarity</h3>
+<pre class="r"><code>allele_file &lt;- file.path(here(), &quot;files&quot;, &quot;allele_stats.Rds&quot;)</code></pre>
+<pre class="r"><code>## Takes 15-20 mins to run so .Rds saved for convenience
+if (!file.exists(allele_file)) {
+  allele_stats &lt;- lapply(samples_byGroup, function(samples){
+    apply(gt[,samples], 1, function(genos){
+      alleles &lt;- genos %&gt;%
+        as.character() %&gt;%
+        str_split(&quot;/&quot;) %&gt;%
+        unlist()
+      n_called &lt;- sum(alleles != &quot;.&quot;)
+      n_nocall &lt;- sum(alleles == &quot;.&quot;)
+      n_0 &lt;- sum(alleles == &quot;0&quot;)
+      n_1 &lt;- sum(alleles == &quot;1&quot;)
+      n_2 &lt;- sum(alleles == &quot;2&quot;)
+      n_3 &lt;- sum(alleles == &quot;3&quot;)
+      tibble(
+        n_called = n_called,
+        n_nocall = n_nocall,
+        n_0 = n_0,
+        n_1 = n_1,
+        n_2 = n_2,
+        n_3 = n_3,
+      )
+    }) %&gt;%
+      bind_rows()
+  })
+  saveRDS(object = allele_stats, file = allele_file)
+} else {
+  allele_stats &lt;- readRDS(allele_file)
+}</code></pre>
+<pre class="r"><code>allele_props &lt;- lapply(allele_stats, function(x){
+  x %&gt;%
+    mutate(
+      prop_ref = ifelse(n_called &gt; n_nocall, n_0 / n_called, NA),
+      prop_called = n_called / (n_called + n_nocall)
+    )
+})</code></pre>
+<pre class="r"><code>diss_win &lt;- 21
+alleleDiss &lt;- lapply(
+  list(
+    allele_props[c(&quot;EOfAD-like/+&quot;, &quot;WT&quot;)],
+    allele_props[c(&quot;fAI-like/+&quot;, &quot;WT&quot;)]
+  ),
+  function(props){
+    diss &lt;- gr
+    diss$comp &lt;- abs(props[[1]]$prop_ref - props[[2]]$prop_ref)
+    diss$qual_ave &lt;- (props[[1]]$prop_called + props[[2]]$prop_called) / 2
+    diss &lt;- as_tibble(diss) %&gt;%
+      dplyr::filter(!is.na(comp)) %&gt;%
+      split(f = .$seqnames) %&gt;%
+      lapply(function(chr){
+        dplyr::mutate(
+          chr,
+          comp_rollmean = rollmean(comp, k = diss_win, fill = NA),
+          qual_rollmean = rollmean(qual_ave, k = diss_win, fill = NA),
+          win_size = lead(start, n = 10) - lag(start, n = 10)
+        ) %&gt;%
+          dplyr::select(-c(comp, qual_ave))
+      }) %&gt;%
+      bind_rows() %&gt;%
+      GRanges()
+  }
+) %&gt;%
+  set_names(c(&quot;EOfAD&quot;, &quot;fAI&quot;))</code></pre>
+</div>
+<div id="logfc" class="section level3">
+<h3>logFC</h3>
+<pre class="r"><code>lfc_win &lt;- 21
+lfc &lt;- lapply(topDE, function(x){
+  x %&gt;%
+    dplyr::select(
+      # Don&#39;t include strand because allelic differences between groups is consistent between strands
+      gene_id, gene_name, logFC, seqnames = chromosome, start, end, width
+    ) %&gt;%
+    dplyr::filter(seqnames %in% primary_chrs) %&gt;%
+    mutate(abs.logFC = abs(logFC)) %&gt;%
+    split(f = .$seqnames) %&gt;%
+    lapply(function(chr){
+      mutate(
+        chr,
+        lfc_rollmean = rollmean(abs.logFC, k = lfc_win, fill = NA)
+      )
+    }) %&gt;%
+    bind_rows() %&gt;%
+    GRanges()
+})</code></pre>
+</div>
+<div id="visualisation" class="section level3">
+<h3>Visualisation</h3>
+<pre class="r"><code>plot_alleleDiss &lt;- function(
+  chr, genes,
+  diss, diss_win, diss_type, diss_trans = 1,
+  lfc, lfc_win, lfc_type, lfc_trans = 1,
+  title
+){
+  axis_track &lt;- GenomeAxisTrack(add53 = TRUE, add35 = TRUE)
+  gene_track &lt;- genes %&gt;%
+    plyranges::filter(seqnames == chr) %&gt;%
+    plyranges::mutate(symbol = gene_name) %&gt;%
+    GeneRegionTrack(
+      name = &quot;DE Genes&quot;,
+      transcriptAnnotation = &quot;symbol&quot;,
+      showTranscriptId = TRUE,
+      fontcolor.group = 1,
+      cex.group = 0.5,
+      rotation.group = 0,
+      size = 0.2
+    )
+  diss_track &lt;- diss[,&quot;comp_rollmean&quot;] %&gt;%
+    plyranges::filter(seqnames == chr) %&gt;%
+    DataTrack(
+      type = diss_type,
+      name = &quot;Between-group genetic dissimilarity&quot;,
+      window = -1,
+      windowSize = 1,
+      col = &quot;grey30&quot;,
+      col.axis = &quot;black&quot;,
+      yTicksAt = seq(0, 1, 0.2),
+      ylim = c(0, 1),
+      transformation = function(x){x^(diss_trans)}
+    )
+  lfc_track &lt;- lfc[,&quot;lfc_rollmean&quot;] %&gt;%
+    plyranges::filter(seqnames == chr) %&gt;%
+    DataTrack(
+      type = lfc_type,
+      name = &quot;Absolute logFC&quot;,
+      size = 1.5,
+      window = -1,
+      windowSize = 1,
+      col.axis = &quot;black&quot;,
+      showColorBar = TRUE,
+      gradient = viridis(100, option = &quot;D&quot;),
+      transformation = function(x){x^(lfc_trans)}
+    )
+  plotTracks(
+    list(axis_track, gene_track, diss_track, lfc_track),
+    main = title,
+    cex.main = 1,
+    col.title = &quot;black&quot;,
+    background.panel = &quot;white&quot;,
+    background.title = &quot;white&quot;
+  )
+}</code></pre>
+<pre class="r"><code>chr &lt;- &quot;17&quot;
+ind &lt;- 2
+plot_alleleDiss(
+  chr = chr, genes = genes[deGenes[[ind]]$gene_id],
+  diss = alleleDiss[[ind]], diss_win = diss_win, diss_type = &quot;l&quot;, diss_trans = 1,
+  lfc = lfc[[ind]], lfc_win = lfc_win, lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
+  title = paste0(
+    names(deGenes[ind]),
+    &quot; - chr &quot;, chr,
+    &quot; - dissimilarity window of &quot;, diss_win, &quot; SNVs&quot;,
+    &quot; - logFC window of &quot;, lfc_win, &quot; genes&quot;
+    )
+)</code></pre>
+<p><img src="variants_files/figure-html/plot1-1.png" width="768" style="display: block; margin: auto;" /></p>
+<p>Circos plot: - cube root the dissimilarity metric - plot absolute logFC</p>
+<p>Look at regulatory TFT datasets</p>
+<p>Try quasi likelihood for DE testing</p>
+<p>The window is called an elastic window - Give a summary of window sizes</p>
+<p>05/04 enrichment analysis on mouse data etqls vs non eqtls vis of dissimiliar region and plot diff of alellic expression levels for all genes in that region (like cpm plots)</p>
+</div>
+</div>
+</div>
+
+
+
+</div>
+</div>
+
+</div>
+
+<script>
+
+// add bootstrap table styles to pandoc tables
+function bootstrapStylePandocTables() {
+  $('tr.odd').parent('tbody').parent('table').addClass('table table-condensed');
+}
+$(document).ready(function () {
+  bootstrapStylePandocTables();
+});
+
+
+</script>
+
+<!-- tabsets -->
+
+<script>
+$(document).ready(function () {
+  window.buildTabsets("TOC");
+});
+
+$(document).ready(function () {
+  $('.tabset-dropdown > .nav-tabs > li').click(function () {
+    $(this).parent().toggleClass('nav-tabs-open');
+  });
+});
+</script>
+
+<!-- code folding -->
+<script>
+$(document).ready(function () {
+  window.initializeCodeFolding("hide" === "show");
+});
+</script>
+
+<script>
+$(document).ready(function ()  {
+
+    // temporarily add toc-ignore selector to headers for the consistency with Pandoc
+    $('.unlisted.unnumbered').addClass('toc-ignore')
+
+    // move toc-ignore selectors from section div to header
+    $('div.section.toc-ignore')
+        .removeClass('toc-ignore')
+        .children('h1,h2,h3,h4,h5').addClass('toc-ignore');
+
+    // establish options
+    var options = {
+      selectors: "h1,h2,h3,h4",
+      theme: "bootstrap3",
+      context: '.toc-content',
+      hashGenerator: function (text) {
+        return text.replace(/[.\\/?&!#<>]/g, '').replace(/\s/g, '_');
+      },
+      ignoreSelector: ".toc-ignore",
+      scrollTo: 0
+    };
+    options.showAndHide = true;
+    options.smoothScroll = true;
+
+    // tocify
+    var toc = $("#TOC").tocify(options).data("toc-tocify");
+});
+</script>
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

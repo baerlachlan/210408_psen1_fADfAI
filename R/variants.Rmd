@@ -51,6 +51,8 @@ suppressPackageStartupMessages({
   library(VariantAnnotation)
   library(Gviz)
   library(zoo)
+  library(msigdbr)
+  library(viridis)
 })
 ```
 
@@ -60,8 +62,8 @@ theme_set(theme_bw())
 cores <- availableCores() - 1
 ```
 
-```{r}
-# source("~/bioinformatics/bioToolkit/lbFuncs.R")
+```{r funcs}
+source("~/bioinformatics/bioToolkit/lbFuncs.R")
 ```
 
 ```{r}
@@ -76,19 +78,36 @@ options(ucscChromosomeNames = FALSE)
 
 ## EnsDb
 
-```{r}
+```{r ensParams}
+ens_species <- "Danio rerio"
+ens_release <- "101"
+ens_assembly <- "GRCz11"
+```
+
+```{r ensDb}
 ah <- AnnotationHub() %>%
-  subset(species == "Danio rerio") %>%
+  subset(species == ens_species) %>%
   subset(rdataclass == "EnsDb")
-ensDb <- ah[["AH83189"]] ## Ens101
-genes <- genes(ensDb, filter = SeqNameFilter(drChrs))
+ahId <- ah$ah_id[str_detect(ah$title, ens_release)]
+ensDb <- ah[[ahId]]
+```
+
+```{r chrInfo}
+chrInfo <- getChromInfoFromEnsembl(ens_assembly, release = ens_release) %>%
+  dplyr::filter(coord_system == "chromosome")
+primary_chrs <- chrInfo$name
+```
+
+```{r genes}
+genes <- genes(ensDb, filter = SeqNameFilter(primary_chrs))
 mcols(genes) <- mcols(genes)[
   c("gene_id", "gene_name", "gene_biotype", "entrezid")
 ]
-exons <- exonsBy(ensDb, by = "gene", filter = SeqNameFilter(drChrs))
 ```
 
-An `EnsDb` object for Ensembl release 101 was accessed and gene and exon annotation information was extracted.
+```{r exons}
+exons <- exonsBy(ensDb, by = "gene", filter = SeqNameFilter(primary_chrs))
+```
 
 ## Metadata
 
@@ -141,10 +160,6 @@ wt_samples <- metadata[metadata$genotype == "WT",]$sample %>%
   droplevels()
 ```
 
-```{r}
-drChrs <- seq(1:25)
-```
-
 # DE data
 
 ```{r deData}
@@ -154,8 +169,6 @@ topDE <- readRDS(file.path(projDir, "files/topTables_cqn.Rds")) %>%
 
 ```{r deGenes}
 deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
-de_fAD <- deGenes$fAD$gene_id
-de_fAI <- deGenes$fAI$gene_id
 ```
 
 # Variation
@@ -171,12 +184,16 @@ vcf <- suppressWarnings({
 })
 ```
 
-```{r}
+```{r gr}
 gr <- rowRanges(vcf)
 mcols(gr) <- NULL
+gr <- gr %>%
+  as.data.frame() %>%
+  droplevels() %>%
+  GRanges()
 ```
 
-```{r}
+```{r gt}
 unphase_GTs <- function(x){
   str_replace(x, "\\|", "\\/")
 }
@@ -185,131 +202,18 @@ gt <- geno(vcf)$GT %>%
   mutate(across(everything(), unphase_GTs))
 ```
 
-## Within groups
-<!--
-```{r}
-gt_similarity <- lapply(samples_byGeno, function(samples){
-gt_summary <- apply(gt[,samples], 1, function(x){
-## Sort the vector so that the "./." (no-call) genotype is always last
-## which.max() will therefore always return a called genotype if tied with a no-call
-tab <- table(x) %>%
-.[rev(sort(names(.)))]
-gt_max <- names(which.max(tab))
-n_max <- sum(x == gt_max)
-n_called <- sum(x != "./.")
-n_nocall <- sum(x == "./.")
-tibble(
-gt_max = gt_max,
-n_max = n_max,
-n_called = n_called,
-n_nocall = n_nocall
-)
-}) %>%
-bind_rows()
-mcols(gr) <- gt_summary
-gr %>%
-plyranges::filter(gt_max != "./.") %>%  # Because of the above sort, this won't remove rows where n_nocall == most called genotype
-plyranges::mutate(
-percent = n_max / n_called,
-cumsum = cumsum(percent),
-lag = dplyr::lag(cumsum, n = 50, default = NA),
-lead = dplyr::lead(cumsum, n = 50, default = NA),
-window_sum = lead - lag,
-window_ave = window_sum / 101
-)
-})
-```
-
-```{r}
-lapply(seq_along(gt_similarity), function(ind){
-overlaps <- findOverlaps(gt_similarity[[ind]], gr)
-colname <- names(gt_similarity[ind])
-mcols(gr)[,colname] <<- NA
-mcols(gr)[subjectHits(overlaps), colname] <<-
-mcols(gt_similarity[[ind]])[queryHits(overlaps), "window_ave"]
-})
-```
-
-```{r}
-axis_track <- GenomeAxisTrack()
-```
-
-```{r}
-aTrack_alz <- genes[de_fAD] %>%
-plyranges::filter(seqnames == "17") %>%
-GeneRegionTrack(
-name = "Alz DE",
-transcriptAnnotation = "symbol",
-fontcolor.group = 1,
-cex.group = 0.5,
-rotation.group = c(35, 35, 35, 0, 0)
-)
-dTrack_alz <- gr[,c("EOfAD-like/+", "WT")] %>%
-plyranges::filter(seqnames == "17") %>%
-DataTrack(
-type = "l",
-name = "Alzheimer's comparison",
-window = -1,
-windowSize = 1,
-groups = c("EOfAD-like/+","WT"),
-col = genoCols[c("EOfAD-like/+", "WT")],
-baseline = c(0.5, 1)
-)
-aTrack_acne <- genes[de_fAI] %>%
-plyranges::filter(seqnames == "17") %>%
-GeneRegionTrack(
-name = "Acne DE",
-transcriptAnnotation = "symbol",
-fontcolor.group = 1,
-cex.group = 0.5
-)
-dTrack_acne <- gr[,c("fAI-like/+", "WT")] %>%
-plyranges::filter(seqnames == "17") %>%
-DataTrack(
-type = "l",
-name = "Acne Inversa Comparison",
-window = -1,
-windowSize = 1,
-groups = c("fAI-like/+","WT"),
-col = genoCols[c("fAI-like/+", "WT")]
-)
-plotTracks(list(axis_track, aTrack_alz, dTrack_alz, aTrack_acne, dTrack_acne))
-```
-
-```{r}
-axis_track <- GenomeAxisTrack()
-aTrack_alz <- genes[de_fAD] %>%
-plyranges::filter(seqnames == "6") %>%
-GeneRegionTrack(
-name = "Alz DE",
-transcriptAnnotation = "symbol",
-fontcolor.group = 1,
-cex.group = 0.5,
-rotation.group = c(35, 35, 35, 0, 0)
-)
-dTrack_alz <- gr[,c("EOfAD-like/+", "WT")] %>%
-plyranges::filter(seqnames == "6") %>%
-DataTrack(
-type = "l",
-name = "Alzheimer's comparison",
-window = -1,
-windowSize = 1,
-groups = c("EOfAD-like/+","WT"),
-col = genoCols[c("EOfAD-like/+", "WT")]
-)
-plotTracks(list(axis_track, aTrack_alz, dTrack_alz))
-```
--->
 ## Between groups
 
-```{r}
+### Allelic dissimilarity
+
+```{r allele_file}
 allele_file <- file.path(here(), "files", "allele_stats.Rds")
 ```
 
-```{r}
+```{r allele_stats}
 ## Takes 15-20 mins to run so .Rds saved for convenience
 if (!file.exists(allele_file)) {
-  allele_stats <- lapply(samples_byGeno, function(samples){
+  allele_stats <- lapply(samples_byGroup, function(samples){
     apply(gt[,samples], 1, function(genos){
       alleles <- genos %>%
         as.character() %>%
@@ -338,7 +242,7 @@ if (!file.exists(allele_file)) {
 }
 ```
 
-```{r}
+```{r allele_props}
 allele_props <- lapply(allele_stats, function(x){
   x %>%
     mutate(
@@ -348,100 +252,133 @@ allele_props <- lapply(allele_stats, function(x){
 })
 ```
 
-### EOfAD
-
-```{r}
-window <- 101
-gr_alz <- gr
-gr_alz$comp <- abs(allele_props$`EOfAD-like/+`$prop_ref - allele_props$WT$prop_ref)
-gr_alz$qual_ave <- (allele_props$`EOfAD-like/+`$prop_called + allele_props$WT$prop_called) / 2
-gr_alz <- plyranges::filter(gr_alz, !is.na(comp)) %>%
-  plyranges::mutate(
-    comp_window = rollmean(comp, k = window, fill = NA),
-    qual_window = rollmean(qual_ave, k = window, fill = NA),
-  ) %>%
-  plyranges::select(-c(comp, qual_ave))
+```{r alleleDiss}
+diss_win <- 21
+alleleDiss <- lapply(
+  list(
+    allele_props[c("EOfAD-like/+", "WT")],
+    allele_props[c("fAI-like/+", "WT")]
+  ),
+  function(props){
+    diss <- gr
+    diss$comp <- abs(props[[1]]$prop_ref - props[[2]]$prop_ref)
+    diss$qual_ave <- (props[[1]]$prop_called + props[[2]]$prop_called) / 2
+    diss <- as_tibble(diss) %>%
+      dplyr::filter(!is.na(comp)) %>%
+      split(f = .$seqnames) %>%
+      lapply(function(chr){
+        dplyr::mutate(
+          chr,
+          comp_rollmean = rollmean(comp, k = diss_win, fill = NA),
+          qual_rollmean = rollmean(qual_ave, k = diss_win, fill = NA),
+          win_size = lead(start, n = 10) - lag(start, n = 10)
+        ) %>%
+          dplyr::select(-c(comp, qual_ave))
+      }) %>%
+      bind_rows() %>%
+      GRanges()
+  }
+) %>%
+  set_names(c("EOfAD", "fAI"))
 ```
 
-```{r}
-axis_track <- GenomeAxisTrack()
-geneTrack_alz <- genes[de_fAD] %>%
-  plyranges::filter(seqnames == "17") %>%
-  plyranges::mutate(symbol = gene_name) %>%
-  GeneRegionTrack(
-    name = "DE genes",
-    transcriptAnnotation = "symbol",
-    showTranscriptId = TRUE,
-    fontcolor.group = 1,
-    cex.group = 0.5,
-    rotation.group = c(35, 35, 35, 0, 0)
-  )
-variationTrack_alz <- gr_alz[,"comp_window"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(
-    type = "l",
-    name = "Allelic variation Alz vs WT",
-    window = -1,
-    windowSize = 1,
-  )
-qualTrack_alz <- gr_alz[,"qual_window"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(
-    type = "l",
-    name = "Quality",
-    window = -1,
-    windowSize = 1,
-    color = "black"
-  )
-plotTracks(list(axis_track, geneTrack_alz, variationTrack_alz, qualTrack_alz))
+### logFC
+
+```{r lfc}
+lfc_win <- 21
+lfc <- lapply(topDE, function(x){
+  x %>%
+    dplyr::select(
+      # Don't include strand because allelic differences between groups is consistent between strands
+      gene_id, gene_name, logFC, seqnames = chromosome, start, end, width
+    ) %>%
+    dplyr::filter(seqnames %in% primary_chrs) %>%
+    mutate(abs.logFC = abs(logFC)) %>%
+    split(f = .$seqnames) %>%
+    lapply(function(chr){
+      mutate(
+        chr,
+        lfc_rollmean = rollmean(abs.logFC, k = lfc_win, fill = NA)
+      )
+    }) %>%
+    bind_rows() %>%
+    GRanges()
+})
 ```
 
-### fAI
+### Visualisation
 
-```{r}
-window <- 101
-gr_acne <- gr
-gr_acne$comp <- abs(allele_props$`fAI-like/+`$prop_ref - allele_props$WT$prop_ref)
-gr_acne$qual_ave <- (allele_props$`fAI-like/+`$prop_called + allele_props$WT$prop_called) / 2
-gr_acne <- plyranges::filter(gr_acne, !is.na(comp)) %>%
-  plyranges::mutate(
-    comp_window = rollmean(comp, k = window, fill = NA),
-    qual_window = rollmean(qual_ave, k = window, fill = NA),
-  ) %>%
-  plyranges::select(-c(comp, qual_ave))
+```{r plot_alleleDiss}
+plot_alleleDiss <- function(
+  chr, genes,
+  diss, diss_win, diss_type, diss_trans = 1,
+  lfc, lfc_win, lfc_type, lfc_trans = 1,
+  title
+){
+  axis_track <- GenomeAxisTrack(add53 = TRUE, add35 = TRUE)
+  gene_track <- genes %>%
+    plyranges::filter(seqnames == chr) %>%
+    plyranges::mutate(symbol = gene_name) %>%
+    GeneRegionTrack(
+      name = "DE Genes",
+      transcriptAnnotation = "symbol",
+      showTranscriptId = TRUE,
+      fontcolor.group = 1,
+      cex.group = 0.5,
+      rotation.group = 0,
+      size = 0.2
+    )
+  diss_track <- diss[,"comp_rollmean"] %>%
+    plyranges::filter(seqnames == chr) %>%
+    DataTrack(
+      type = diss_type,
+      name = "Between-group genetic dissimilarity",
+      window = -1,
+      windowSize = 1,
+      col = "grey30",
+      col.axis = "black",
+      yTicksAt = seq(0, 1, 0.2),
+      ylim = c(0, 1),
+      transformation = function(x){x^(diss_trans)}
+    )
+  lfc_track <- lfc[,"lfc_rollmean"] %>%
+    plyranges::filter(seqnames == chr) %>%
+    DataTrack(
+      type = lfc_type,
+      name = "Absolute logFC",
+      size = 1.5,
+      window = -1,
+      windowSize = 1,
+      col.axis = "black",
+      showColorBar = TRUE,
+      gradient = viridis(100, option = "D"),
+      transformation = function(x){x^(lfc_trans)}
+    )
+  plotTracks(
+    list(axis_track, gene_track, diss_track, lfc_track),
+    main = title,
+    cex.main = 1,
+    col.title = "black",
+    background.panel = "white",
+    background.title = "white"
+  )
+}
 ```
 
-```{r}
-axis_track <- GenomeAxisTrack()
-geneTrack_acne <- genes[de_fAI] %>%
-  plyranges::filter(seqnames == "17") %>%
-  plyranges::mutate(symbol = gene_name) %>%
-  GeneRegionTrack(
-    name = "DE genes",
-    transcriptAnnotation = "symbol",
-    showTranscriptId = TRUE,
-    fontcolor.group = 1,
-    cex.group = 0.5,
-    rotation.group = c(35, 35, 35, 0, 0)
-  )
-variationTrack_acne <- gr_acne[,"comp_window"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(
-    type = "l",
-    name = "Allelic variation Acne vs WT",
-    window = -1,
-    windowSize = 1,
-  )
-qualTrack_acne <- gr_acne[,"qual_window"] %>%
-  plyranges::filter(seqnames == "17") %>%
-  DataTrack(
-    type = "l",
-    name = "Quality",
-    window = -1,
-    windowSize = 1,
-    color = "black"
-  )
-plotTracks(list(axis_track, geneTrack_acne, variationTrack_acne, qualTrack_acne))
+```{r plot1}
+chr <- "17"
+ind <- 2
+plot_alleleDiss(
+  chr = chr, genes = genes[deGenes[[ind]]$gene_id],
+  diss = alleleDiss[[ind]], diss_win = diss_win, diss_type = "l", diss_trans = 1,
+  lfc = lfc[[ind]], lfc_win = lfc_win, lfc_type = "heatmap", lfc_trans = 1/3,
+  title = paste0(
+    names(deGenes[ind]),
+    " - chr ", chr,
+    " - dissimilarity window of ", diss_win, " SNVs",
+    " - logFC window of ", lfc_win, " genes"
+    )
+)
 ```
 
 Circos plot:
@@ -454,3 +391,8 @@ Try quasi likelihood for DE testing
 
 The window is called an elastic window
   - Give a summary of window sizes
+  
+  
+05/04
+enrichment analysis on mouse data etqls vs non eqtls
+vis of dissimiliar region and plot diff of alellic expression levels for all genes in that region (like cpm plots)
