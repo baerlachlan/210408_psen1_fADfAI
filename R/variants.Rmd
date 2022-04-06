@@ -13,7 +13,7 @@ output:
     fig_height: 6
     fig_align: "center"
     code_folding: hide
-editor_options: 
+editor_options:
   chunk_output_type: console
 ---
 
@@ -22,13 +22,13 @@ knitr::opts_chunk$set(
   echo = TRUE,
   message = FALSE,
   warning = FALSE,
-  error = FALSE, 
+  error = FALSE,
   fig.align = "center"
 )
 knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 ```
 
-# Setup 
+# Setup
 
 ```{r packages}
 suppressPackageStartupMessages({
@@ -66,13 +66,13 @@ cores <- availableCores() - 1
 source("~/bioinformatics/bioToolkit/lbFuncs.R")
 ```
 
-```{r}
+```{r projDir}
 ## Choose either local or remote project directory
 # projDir <- here()
 projDir <- "/hpcfs/users/a1647910/210408_psen1_fADfAI"
 ```
 
-```{r}
+```{r opts}
 options(ucscChromosomeNames = FALSE)
 ```
 
@@ -145,25 +145,23 @@ genoCols <- metadata$genotype %>%
 compCols <- genoCols[1:2]
 ```
 
-```{r}
-samples_byGeno <- metadata %>%
+```{r samples_byGroup}
+samples_byGroup <- metadata %>%
   split(f = .$genotype) %>%
   sapply(function(x){
     pull(x, sample) %>%
       droplevels()
   }, simplify = FALSE)
-alz_samples <- metadata[metadata$genotype == "EOfAD-like/+",]$sample %>%
-  droplevels()
-acne_samples <- metadata[metadata$genotype == "fAI-like/+",]$sample %>%
-  droplevels()
-wt_samples <- metadata[metadata$genotype == "WT",]$sample %>%
-  droplevels()
 ```
 
 # DE data
 
 ```{r deData}
 topDE <- readRDS(file.path(projDir, "files/topTables_cqn.Rds")) %>%
+  sapply(function(x){
+    dplyr::filter(x, chromosome %in% primary_chrs) %>%
+      droplevels()
+  }, simplify = FALSE) %>%
   set_names(c("fAD", "fAI"))
 ```
 
@@ -173,7 +171,7 @@ deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
 
 # Variation
 
-```{r}
+```{r vcf}
 vcf_file <- file.path(
   "/hpcfs/users/a1647910/210408_psen1_fADfAI",
   "analysis-variants/10_variants/6_select/all_samples.vcf.gz"
@@ -277,6 +275,7 @@ alleleDiss <- lapply(
       }) %>%
       bind_rows() %>%
       GRanges()
+    diss
   }
 ) %>%
   set_names(c("EOfAD", "fAI"))
@@ -310,24 +309,48 @@ lfc <- lapply(topDE, function(x){
 
 ```{r plot_alleleDiss}
 plot_alleleDiss <- function(
-  chr, genes,
+  chr, genes, highlight = TRUE, mutation = NULL,
   diss, diss_win, diss_type, diss_trans = 1,
   lfc, lfc_win, lfc_type, lfc_trans = 1,
   title
 ){
-  axis_track <- GenomeAxisTrack(add53 = TRUE, add35 = TRUE)
-  gene_track <- genes %>%
+  genes <- genes %>%
     plyranges::filter(seqnames == chr) %>%
-    plyranges::mutate(symbol = gene_name) %>%
-    GeneRegionTrack(
-      name = "DE Genes",
-      transcriptAnnotation = "symbol",
-      showTranscriptId = TRUE,
-      fontcolor.group = 1,
-      cex.group = 0.5,
-      rotation.group = 0,
-      size = 0.2
+    plyranges::mutate(symbol = gene_name)
+  mutation <- mutation %>%
+    plyranges::filter(seqnames == chr) %>%
+    plyranges::mutate(symbol = gene_name)
+  axis_track <- GenomeAxisTrack(
+    add53 = TRUE,
+    add35 = TRUE,
+    name = paste0("Chr", chr),
+    showTitle = TRUE
+  )
+  if (length(mutation)) {
+    axis_track <- HighlightTrack(
+      trackList = list(axis_track),
+      range = mutation
     )
+  }
+  mutant_track <- GeneRegionTrack(
+    range = mutation,
+    transcriptAnnotation = "symbol",
+    col = "white",
+    fill = "white",
+    showTranscriptId = TRUE,
+    fontcolor.group = "red",
+    cex.group = 0.6,
+    size = 0.3
+  )
+  gene_track <- GeneRegionTrack(
+    range = genes,
+    name = "DE",
+    transcriptAnnotation = "symbol",
+    showTranscriptId = TRUE,
+    fontcolor.group = 1,
+    cex.group = 0.5,
+    size = 0.3
+  )
   diss_track <- diss[,"comp_rollmean"] %>%
     plyranges::filter(seqnames == chr) %>%
     DataTrack(
@@ -341,11 +364,19 @@ plot_alleleDiss <- function(
       ylim = c(0, 1),
       transformation = function(x){x^(diss_trans)}
     )
+  if (highlight) {
+    diss_track <- HighlightTrack(
+      trackList = list(diss_track),
+      range = genes,
+      col = "#ffd1d1",
+      fill = "#ffd1d1"
+    )
+  }
   lfc_track <- lfc[,"lfc_rollmean"] %>%
     plyranges::filter(seqnames == chr) %>%
     DataTrack(
       type = lfc_type,
-      name = "Absolute logFC",
+      name = paste0("abs.logFC^(1/3)"),
       size = 1.5,
       window = -1,
       windowSize = 1,
@@ -355,11 +386,10 @@ plot_alleleDiss <- function(
       transformation = function(x){x^(lfc_trans)}
     )
   plotTracks(
-    list(axis_track, gene_track, diss_track, lfc_track),
+    list(mutant_track, axis_track, gene_track, diss_track, lfc_track),
     main = title,
     cex.main = 1,
     col.title = "black",
-    background.panel = "white",
     background.title = "white"
   )
 }
@@ -369,15 +399,16 @@ plot_alleleDiss <- function(
 chr <- "17"
 ind <- 2
 plot_alleleDiss(
-  chr = chr, genes = genes[deGenes[[ind]]$gene_id],
+  chr = chr,
+  genes = genes[deGenes[[ind]]$gene_id],
+  mutation = genes[genes$gene_name == "psen1"],
   diss = alleleDiss[[ind]], diss_win = diss_win, diss_type = "l", diss_trans = 1,
   lfc = lfc[[ind]], lfc_win = lfc_win, lfc_type = "heatmap", lfc_trans = 1/3,
   title = paste0(
-    names(deGenes[ind]),
-    " - chr ", chr,
-    " - dissimilarity window of ", diss_win, " SNVs",
-    " - logFC window of ", lfc_win, " genes"
-    )
+    "Acne Inversa vs WT",
+    " - dissimilarity win of ", diss_win, " SNVs",
+    " - logFC win of ", lfc_win, " genes"
+  )
 )
 ```
 
@@ -391,8 +422,3 @@ Try quasi likelihood for DE testing
 
 The window is called an elastic window
   - Give a summary of window sizes
-  
-  
-05/04
-enrichment analysis on mouse data etqls vs non eqtls
-vis of dissimiliar region and plot diff of alellic expression levels for all genes in that region (like cpm plots)

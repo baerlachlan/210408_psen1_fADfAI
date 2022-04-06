@@ -370,7 +370,7 @@ div.tocify {
 <h1 class="title toc-ignore">Variants Analysis</h1>
 <h3 class="subtitle">210408_psen1_fADfAI dataset</h3>
 <h4 class="author">Lachlan Baer</h4>
-<h4 class="date">05 April, 2022</h4>
+<h4 class="date">06 April, 2022</h4>
 
 </div>
 
@@ -969,23 +969,21 @@ M
   brewer.pal(&quot;Set1&quot;) %&gt;%
   setNames(levels(metadata$genotype))
 compCols &lt;- genoCols[1:2]</code></pre>
-<pre class="r"><code>samples_byGeno &lt;- metadata %&gt;%
+<pre class="r"><code>samples_byGroup &lt;- metadata %&gt;%
   split(f = .$genotype) %&gt;%
   sapply(function(x){
     pull(x, sample) %&gt;%
       droplevels()
-  }, simplify = FALSE)
-alz_samples &lt;- metadata[metadata$genotype == &quot;EOfAD-like/+&quot;,]$sample %&gt;%
-  droplevels()
-acne_samples &lt;- metadata[metadata$genotype == &quot;fAI-like/+&quot;,]$sample %&gt;%
-  droplevels()
-wt_samples &lt;- metadata[metadata$genotype == &quot;WT&quot;,]$sample %&gt;%
-  droplevels()</code></pre>
+  }, simplify = FALSE)</code></pre>
 </div>
 </div>
 <div id="de-data" class="section level1">
 <h1>DE data</h1>
 <pre class="r"><code>topDE &lt;- readRDS(file.path(projDir, &quot;files/topTables_cqn.Rds&quot;)) %&gt;%
+  sapply(function(x){
+    dplyr::filter(x, chromosome %in% primary_chrs) %&gt;%
+      droplevels()
+  }, simplify = FALSE) %&gt;%
   set_names(c(&quot;fAD&quot;, &quot;fAI&quot;))</code></pre>
 <pre class="r"><code>deGenes &lt;- sapply(topDE, dplyr::filter, DE, simplify = FALSE)</code></pre>
 </div>
@@ -1076,6 +1074,7 @@ alleleDiss &lt;- lapply(
       }) %&gt;%
       bind_rows() %&gt;%
       GRanges()
+    diss
   }
 ) %&gt;%
   set_names(c(&quot;EOfAD&quot;, &quot;fAI&quot;))</code></pre>
@@ -1106,22 +1105,38 @@ lfc &lt;- lapply(topDE, function(x){
 <h3>Visualisation</h3>
 <pre class="r"><code>plot_alleleDiss &lt;- function(
   chr, genes,
+  mutation = NULL, highlight = TRUE,
   diss, diss_win, diss_type, diss_trans = 1,
   lfc, lfc_win, lfc_type, lfc_trans = 1,
   title
 ){
-  axis_track &lt;- GenomeAxisTrack(add53 = TRUE, add35 = TRUE)
-  gene_track &lt;- genes %&gt;%
+  genes &lt;- genes %&gt;%
     plyranges::filter(seqnames == chr) %&gt;%
-    plyranges::mutate(symbol = gene_name) %&gt;%
+    plyranges::mutate(symbol = gene_name)
+  mutation &lt;- mutation %&gt;%
+    plyranges::filter(seqnames == chr) %&gt;%
+    plyranges::mutate(symbol = gene_name)
+  axis_track &lt;- GenomeAxisTrack(
+    add53 = TRUE,
+    add35 = TRUE,
+    name = paste0(&quot;Chr&quot;, chr),
+    showTitle = TRUE
+  )
+  if (length(mutation)) {
+    axis_track &lt;- HighlightTrack(
+      trackList = list(axis_track),
+      range = mutation
+    )
+  }
+  gene_track &lt;- genes %&gt;%
     GeneRegionTrack(
-      name = &quot;DE Genes&quot;,
+      name = &quot;DE&quot;,
       transcriptAnnotation = &quot;symbol&quot;,
       showTranscriptId = TRUE,
       fontcolor.group = 1,
       cex.group = 0.5,
       rotation.group = 0,
-      size = 0.2
+      size = 0.3
     )
   diss_track &lt;- diss[,&quot;comp_rollmean&quot;] %&gt;%
     plyranges::filter(seqnames == chr) %&gt;%
@@ -1136,11 +1151,19 @@ lfc &lt;- lapply(topDE, function(x){
       ylim = c(0, 1),
       transformation = function(x){x^(diss_trans)}
     )
+  if (highlight) {
+    diss_track &lt;- HighlightTrack(
+      trackList = list(diss_track),
+      range = genes,
+      col = &quot;#ffd1d1&quot;,
+      fill = &quot;#ffd1d1&quot;
+    )
+  }
   lfc_track &lt;- lfc[,&quot;lfc_rollmean&quot;] %&gt;%
     plyranges::filter(seqnames == chr) %&gt;%
     DataTrack(
       type = lfc_type,
-      name = &quot;Absolute logFC&quot;,
+      name = &quot;Abs logFC&quot;,
       size = 1.5,
       window = -1,
       windowSize = 1,
@@ -1154,29 +1177,28 @@ lfc &lt;- lapply(topDE, function(x){
     main = title,
     cex.main = 1,
     col.title = &quot;black&quot;,
-    background.panel = &quot;white&quot;,
     background.title = &quot;white&quot;
   )
 }</code></pre>
 <pre class="r"><code>chr &lt;- &quot;17&quot;
 ind &lt;- 2
 plot_alleleDiss(
-  chr = chr, genes = genes[deGenes[[ind]]$gene_id],
+  chr = chr,
+  genes = genes[deGenes[[ind]]$gene_id],
+  mutation = genes[genes$gene_name == &quot;psen1&quot;],
   diss = alleleDiss[[ind]], diss_win = diss_win, diss_type = &quot;l&quot;, diss_trans = 1,
   lfc = lfc[[ind]], lfc_win = lfc_win, lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
   title = paste0(
     names(deGenes[ind]),
-    &quot; - chr &quot;, chr,
-    &quot; - dissimilarity window of &quot;, diss_win, &quot; SNVs&quot;,
-    &quot; - logFC window of &quot;, lfc_win, &quot; genes&quot;
-    )
+    &quot; - dissimilarity win of &quot;, diss_win, &quot; SNVs&quot;,
+    &quot; - logFC win of &quot;, lfc_win, &quot; genes&quot;
+  )
 )</code></pre>
 <p><img src="variants_files/figure-html/plot1-1.png" width="768" style="display: block; margin: auto;" /></p>
 <p>Circos plot: - cube root the dissimilarity metric - plot absolute logFC</p>
 <p>Look at regulatory TFT datasets</p>
 <p>Try quasi likelihood for DE testing</p>
 <p>The window is called an elastic window - Give a summary of window sizes</p>
-<p>05/04 enrichment analysis on mouse data etqls vs non eqtls vis of dissimiliar region and plot diff of alellic expression levels for all genes in that region (like cpm plots)</p>
 </div>
 </div>
 </div>
