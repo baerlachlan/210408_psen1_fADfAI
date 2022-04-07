@@ -370,7 +370,7 @@ div.tocify {
 <h1 class="title toc-ignore">Variants Analysis</h1>
 <h3 class="subtitle">210408_psen1_fADfAI dataset</h3>
 <h4 class="author">Lachlan Baer</h4>
-<h4 class="date">06 April, 2022</h4>
+<h4 class="date">07 April, 2022</h4>
 
 </div>
 
@@ -984,7 +984,7 @@ compCols &lt;- genoCols[1:2]</code></pre>
     dplyr::filter(x, chromosome %in% primary_chrs) %&gt;%
       droplevels()
   }, simplify = FALSE) %&gt;%
-  set_names(c(&quot;fAD&quot;, &quot;fAI&quot;))</code></pre>
+  set_names(c(&quot;EOfADvsWT&quot;, &quot;fAIvsWT&quot;))</code></pre>
 <pre class="r"><code>deGenes &lt;- sapply(topDE, dplyr::filter, DE, simplify = FALSE)</code></pre>
 </div>
 <div id="variation" class="section level1">
@@ -1016,68 +1016,98 @@ gt &lt;- geno(vcf)$GT %&gt;%
 <pre class="r"><code>allele_file &lt;- file.path(here(), &quot;files&quot;, &quot;allele_stats.Rds&quot;)</code></pre>
 <pre class="r"><code>## Takes 15-20 mins to run so .Rds saved for convenience
 if (!file.exists(allele_file)) {
-  allele_stats &lt;- lapply(samples_byGroup, function(samples){
+  gr_tbl &lt;- as_tibble(gr)
+  allele_counts &lt;- lapply(samples_byGroup, function(samples){
     apply(gt[,samples], 1, function(genos){
       alleles &lt;- genos %&gt;%
         as.character() %&gt;%
         str_split(&quot;/&quot;) %&gt;%
         unlist()
-      n_called &lt;- sum(alleles != &quot;.&quot;)
-      n_nocall &lt;- sum(alleles == &quot;.&quot;)
-      n_0 &lt;- sum(alleles == &quot;0&quot;)
-      n_1 &lt;- sum(alleles == &quot;1&quot;)
-      n_2 &lt;- sum(alleles == &quot;2&quot;)
-      n_3 &lt;- sum(alleles == &quot;3&quot;)
       tibble(
-        n_called = n_called,
-        n_nocall = n_nocall,
-        n_0 = n_0,
-        n_1 = n_1,
-        n_2 = n_2,
-        n_3 = n_3,
+        n_called = sum(alleles != &quot;.&quot;),
+        n_nocall = sum(alleles == &quot;.&quot;),
+        n_0 = sum(alleles == &quot;0&quot;),
+        n_1 = sum(alleles == &quot;1&quot;),
+        n_2 = sum(alleles == &quot;2&quot;),
+        n_3 = sum(alleles == &quot;3&quot;)
       )
     }) %&gt;%
       bind_rows()
+  })
+  allele_stats &lt;- lapply(allele_counts, function(counts){
+    cbind(gr_tbl, counts) %&gt;%
+      mutate(
+        prop_ref = ifelse(n_called &gt; n_nocall, n_0 / n_called, NA),
+        prop_called = n_called / (n_called + n_nocall)
+      ) %&gt;%
+      nest(allele_counts = c(n_called, n_nocall, n_0, n_1, n_2, n_3)) %&gt;%
+      GRanges()
   })
   saveRDS(object = allele_stats, file = allele_file)
 } else {
   allele_stats &lt;- readRDS(allele_file)
 }</code></pre>
-<pre class="r"><code>allele_props &lt;- lapply(allele_stats, function(x){
-  x %&gt;%
-    mutate(
-      prop_ref = ifelse(n_called &gt; n_nocall, n_0 / n_called, NA),
-      prop_called = n_called / (n_called + n_nocall)
-    )
-})</code></pre>
 <pre class="r"><code>diss_win &lt;- 21
-alleleDiss &lt;- lapply(
+allele_diss &lt;- lapply(
   list(
-    allele_props[c(&quot;EOfAD-like/+&quot;, &quot;WT&quot;)],
-    allele_props[c(&quot;fAI-like/+&quot;, &quot;WT&quot;)]
+    allele_stats[c(&quot;EOfAD-like/+&quot;, &quot;WT&quot;)],
+    allele_stats[c(&quot;fAI-like/+&quot;, &quot;WT&quot;)]
   ),
   function(props){
-    diss &lt;- gr
-    diss$comp &lt;- abs(props[[1]]$prop_ref - props[[2]]$prop_ref)
-    diss$qual_ave &lt;- (props[[1]]$prop_called + props[[2]]$prop_called) / 2
-    diss &lt;- as_tibble(diss) %&gt;%
-      dplyr::filter(!is.na(comp)) %&gt;%
+    gr %&gt;%
+      as_tibble() %&gt;%
+      mutate(
+        diss = abs(props[[1]]$prop_ref - props[[2]]$prop_ref),
+        qual_ave = (props[[1]]$prop_called + props[[2]]$prop_called) / 2
+      ) %&gt;%
+      dplyr::filter(!is.na(diss)) %&gt;%
       split(f = .$seqnames) %&gt;%
       lapply(function(chr){
         dplyr::mutate(
           chr,
-          comp_rollmean = rollmean(comp, k = diss_win, fill = NA),
+          diss_rollmean = rollmean(diss, k = diss_win, fill = NA),
           qual_rollmean = rollmean(qual_ave, k = diss_win, fill = NA),
-          win_size = lead(start, n = 10) - lag(start, n = 10)
+          win_start = lag(start, n = (diss_win - 1) / 2),
+          win_end = lead(start, n = (diss_win - 1) / 2),
+          win_size = win_end - win_start
         ) %&gt;%
-          dplyr::select(-c(comp, qual_ave))
+          dplyr::select(-c(diss, qual_ave))
       }) %&gt;%
       bind_rows() %&gt;%
       GRanges()
-    diss
   }
 ) %&gt;%
-  set_names(c(&quot;EOfAD&quot;, &quot;fAI&quot;))</code></pre>
+  set_names(c(&quot;EOfADvsWT&quot;, &quot;fAIvsWT&quot;))</code></pre>
+<div id="window-sizes" class="section level4">
+<h4>Window sizes</h4>
+<pre class="r"><code>lapply(seq_along(allele_diss), function(ind){
+  allele_diss[[ind]] %&gt;%
+    as_tibble() %&gt;%
+    dplyr::filter(!is.na(win_size)) %&gt;%
+    mutate(
+      comparison = factor(names(allele_diss[ind]), levels = names(allele_diss[1:4]))
+    )
+}) %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = &quot;black&quot;,
+    fill = &quot;grey70&quot;
+  ) +
+  scale_x_log10() +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    title = paste0(
+      &quot;Distribution of elastic window sizes generated from &quot;,
+      diss_win,
+      &quot; SNVs&quot;
+    ),
+    x = &quot;Window size (bp)&quot;,
+    y = &quot;Count&quot;
+  )</code></pre>
+<p><img src="variants_files/figure-html/win_size-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
 </div>
 <div id="logfc" class="section level3">
 <h3>logFC</h3>
@@ -1094,28 +1124,73 @@ lfc &lt;- lapply(topDE, function(x){
     lapply(function(chr){
       mutate(
         chr,
-        lfc_rollmean = rollmean(abs.logFC, k = lfc_win, fill = NA)
+        lfc_rollmean = rollmean(abs.logFC, k = lfc_win, fill = NA),
+        win_start = lag(start, n = (lfc_win - 1) / 2),
+        win_end = lead(end, n = (lfc_win - 1) / 2),
+        win_size = abs(win_end - win_start)
       )
     }) %&gt;%
     bind_rows() %&gt;%
     GRanges()
 })</code></pre>
+<div id="window-sizes-1" class="section level4">
+<h4>Window sizes</h4>
+<pre class="r"><code>lapply(seq_along(lfc), function(ind){
+  lfc[[ind]] %&gt;%
+    as_tibble() %&gt;%
+    dplyr::filter(!is.na(win_size)) %&gt;%
+    mutate(
+      comparison = factor(names(lfc[ind]), levels = names(lfc[1:4]))
+    )
+}) %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = &quot;black&quot;,
+    fill = &quot;grey70&quot;
+  ) +
+  scale_x_log10() +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    title = paste0(
+      &quot;Distribution of elastic window sizes generated from &quot;,
+      diss_win,
+      &quot; genes&quot;
+    ),
+    x = &quot;Window size (bp)&quot;,
+    y = &quot;Count&quot;
+  )</code></pre>
+<p><img src="variants_files/figure-html/unnamed-chunk-2-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
 </div>
 <div id="visualisation" class="section level3">
 <h3>Visualisation</h3>
-<pre class="r"><code>plot_alleleDiss &lt;- function(
-  chr, genes,
-  mutation = NULL, highlight = TRUE,
-  diss, diss_win, diss_type, diss_trans = 1,
-  lfc, lfc_win, lfc_type, lfc_trans = 1,
+<pre class="r"><code>plot_allele_diss &lt;- function(
+  chr, genes = GRanges(), mutation = GRanges(),
+  diss, diss_type = &quot;l&quot;, diss_trans = 1, highlight_genes = TRUE,
+  lfc = NULL, lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
   title
 ){
-  genes &lt;- genes %&gt;%
-    plyranges::filter(seqnames == chr) %&gt;%
-    plyranges::mutate(symbol = gene_name)
-  mutation &lt;- mutation %&gt;%
-    plyranges::filter(seqnames == chr) %&gt;%
-    plyranges::mutate(symbol = gene_name)
+  tracks &lt;- list()
+
+  if (length(mutation)) {
+    mutation &lt;- mutation %&gt;%
+      plyranges::filter(seqnames == chr) %&gt;%
+      plyranges::mutate(symbol = gene_name)
+    mutant_track &lt;- GeneRegionTrack(
+      range = mutation,
+      transcriptAnnotation = &quot;symbol&quot;,
+      col = &quot;white&quot;,
+      fill = &quot;white&quot;,
+      showTranscriptId = TRUE,
+      fontcolor.group = &quot;red&quot;,
+      cex.group = 0.6,
+      size = 0.3
+    )
+    tracks &lt;- append(tracks, mutant_track)
+  }
+
   axis_track &lt;- GenomeAxisTrack(
     add53 = TRUE,
     add35 = TRUE,
@@ -1128,17 +1203,25 @@ lfc &lt;- lapply(topDE, function(x){
       range = mutation
     )
   }
-  gene_track &lt;- genes %&gt;%
-    GeneRegionTrack(
+  tracks &lt;- append(tracks, axis_track)
+
+  if (length(genes)) {
+    genes &lt;- genes %&gt;%
+      plyranges::filter(seqnames == chr) %&gt;%
+      plyranges::mutate(symbol = gene_name)
+    gene_track &lt;- GeneRegionTrack(
+      range = genes,
       name = &quot;DE&quot;,
       transcriptAnnotation = &quot;symbol&quot;,
       showTranscriptId = TRUE,
       fontcolor.group = 1,
       cex.group = 0.5,
-      rotation.group = 0,
       size = 0.3
     )
-  diss_track &lt;- diss[,&quot;comp_rollmean&quot;] %&gt;%
+    tracks &lt;- append(tracks, gene_track)
+  }
+
+  diss_track &lt;- diss[,&quot;diss_rollmean&quot;] %&gt;%
     plyranges::filter(seqnames == chr) %&gt;%
     DataTrack(
       type = diss_type,
@@ -1151,29 +1234,42 @@ lfc &lt;- lapply(topDE, function(x){
       ylim = c(0, 1),
       transformation = function(x){x^(diss_trans)}
     )
-  if (highlight) {
+  if (highlight_genes) {
+    if (all(length(genes) &amp; length(mutation))) {
+      ranges &lt;- c(genes, mutation)
+    } else if (length(genes)) {
+      ranges &lt;- genes
+    } else if (length(mutation)) {
+      ranges &lt;- mutation
+    }
     diss_track &lt;- HighlightTrack(
       trackList = list(diss_track),
-      range = genes,
-      col = &quot;#ffd1d1&quot;,
-      fill = &quot;#ffd1d1&quot;
+      range = c(genes, mutation),
+      col = c(rep(&quot;#ffd1d1&quot;, length(genes)), rep(&quot;red&quot;, length(mutation))),
+      fill = c(rep(&quot;#ffd1d1&quot;, length(genes)), rep(&quot;red&quot;, length(mutation)))
     )
   }
-  lfc_track &lt;- lfc[,&quot;lfc_rollmean&quot;] %&gt;%
-    plyranges::filter(seqnames == chr) %&gt;%
-    DataTrack(
-      type = lfc_type,
-      name = &quot;Abs logFC&quot;,
-      size = 1.5,
-      window = -1,
-      windowSize = 1,
-      col.axis = &quot;black&quot;,
-      showColorBar = TRUE,
-      gradient = viridis(100, option = &quot;D&quot;),
-      transformation = function(x){x^(lfc_trans)}
-    )
+  tracks &lt;- append(tracks, diss_track)
+
+  if (length(lfc)) {
+    lfc_track &lt;- lfc[,&quot;lfc_rollmean&quot;] %&gt;%
+      plyranges::filter(seqnames == chr) %&gt;%
+      DataTrack(
+        type = lfc_type,
+        name = paste0(&quot;abs.logFC^(1/3)&quot;),
+        size = 1.5,
+        window = -1,
+        windowSize = 1,
+        col.axis = &quot;black&quot;,
+        showColorBar = TRUE,
+        gradient = viridis(100, option = &quot;D&quot;),
+        transformation = function(x){x^(lfc_trans)}
+      )
+    tracks &lt;- append(tracks, lfc_track)
+  }
+
   plotTracks(
-    list(axis_track, gene_track, diss_track, lfc_track),
+    trackList = tracks,
     main = title,
     cex.main = 1,
     col.title = &quot;black&quot;,
@@ -1182,14 +1278,14 @@ lfc &lt;- lapply(topDE, function(x){
 }</code></pre>
 <pre class="r"><code>chr &lt;- &quot;17&quot;
 ind &lt;- 2
-plot_alleleDiss(
+plot_allele_diss(
   chr = chr,
   genes = genes[deGenes[[ind]]$gene_id],
   mutation = genes[genes$gene_name == &quot;psen1&quot;],
-  diss = alleleDiss[[ind]], diss_win = diss_win, diss_type = &quot;l&quot;, diss_trans = 1,
-  lfc = lfc[[ind]], lfc_win = lfc_win, lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
+  diss = allele_diss[[ind]], diss_type = &quot;l&quot;, diss_trans = 1,
+  lfc = lfc[[ind]], lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
   title = paste0(
-    names(deGenes[ind]),
+    names(allele_diss[ind]),
     &quot; - dissimilarity win of &quot;, diss_win, &quot; SNVs&quot;,
     &quot; - logFC win of &quot;, lfc_win, &quot; genes&quot;
   )
