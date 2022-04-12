@@ -142,7 +142,6 @@ genoCols <- metadata$genotype %>%
   length() %>%
   brewer.pal("Set1") %>%
   setNames(levels(metadata$genotype))
-compCols <- genoCols[1:2]
 ```
 
 ```{r samples_byGroup}
@@ -245,7 +244,7 @@ if (!file.exists(allele_file)) {
 ```
 
 ```{r allele_diss}
-diss_win <- 21
+diss_winSize <- 21
 allele_diss <- lapply(
   list(
     allele_stats[c("EOfAD-like/+", "WT")],
@@ -263,10 +262,10 @@ allele_diss <- lapply(
       lapply(function(chr){
         dplyr::mutate(
           chr,
-          diss_rollmean = rollmean(diss, k = diss_win, fill = NA),
-          qual_rollmean = rollmean(qual_ave, k = diss_win, fill = NA),
-          win_start = lag(start, n = (diss_win - 1) / 2),
-          win_end = lead(start, n = (diss_win - 1) / 2),
+          diss_rollmean = rollmean(diss, k = diss_winSize, fill = NA),
+          qual_rollmean = rollmean(qual_ave, k = diss_winSize, fill = NA),
+          win_start = lag(start, n = (diss_winSize - 1) / 2),
+          win_end = lead(start, n = (diss_winSize - 1) / 2),
           win_size = win_end - win_start
         ) %>%
           dplyr::select(-c(diss, qual_ave))
@@ -278,9 +277,9 @@ allele_diss <- lapply(
   set_names(c("EOfADvsWT", "fAIvsWT"))
 ```
 
-#### Window sizes
+#### Elastic window ranges
 
-```{r win_size}
+```{r plot_snv_winSize}
 lapply(seq_along(allele_diss), function(ind){
   allele_diss[[ind]] %>%
     as_tibble() %>%
@@ -301,12 +300,32 @@ lapply(seq_along(allele_diss), function(ind){
   labs(
     title = paste0(
       "Distribution of elastic window sizes generated from ",
-      diss_win,
+      diss_winSize,
       " SNVs"
     ),
     x = "Window size (bp)",
     y = "Count"
   )
+```
+
+```{r diss_winRanges}
+diss_winRanges <- lapply(allele_diss, function(x){
+  x %>%
+  as_tibble() %>%
+  dplyr::filter(!is.na(win_size)) %>%
+  dplyr::select(
+    seqnames, start = win_start, end = win_end, width = win_size, strand,
+    diss_rollmean, qual_rollmean
+  ) %>%
+  GRanges()
+})
+```
+
+```{r save_diss_winRanges}
+diss_winRanges_path <- file.path(here(), "files", "diss_winRanges.Rds")
+if (!file.exists(diss_winRanges_path)) {
+  saveRDS(diss_winRanges, diss_winRanges_path)
+}
 ```
 
 ### logFC
@@ -336,9 +355,9 @@ lfc <- lapply(topDE, function(x){
 })
 ```
 
-#### Window sizes
+#### Elastic window ranges
 
-```{r}
+```{r plot_lfc_winSize}
 lapply(seq_along(lfc), function(ind){
   lfc[[ind]] %>%
     as_tibble() %>%
@@ -359,7 +378,7 @@ lapply(seq_along(lfc), function(ind){
   labs(
     title = paste0(
       "Distribution of elastic window sizes generated from ",
-      diss_win,
+      diss_winSize,
       " genes"
     ),
     x = "Window size (bp)",
@@ -484,7 +503,7 @@ plot_allele_diss <- function(
 
 ```{r plot1}
 chr <- "17"
-ind <- 2
+ind <- 1
 plot_allele_diss(
   chr = chr,
   genes = genes[deGenes[[ind]]$gene_id],
@@ -493,19 +512,8 @@ plot_allele_diss(
   lfc = lfc[[ind]], lfc_type = "heatmap", lfc_trans = 1/3,
   title = paste0(
     names(allele_diss[ind]),
-    " - dissimilarity win of ", diss_win, " SNVs",
+    " - dissimilarity win of ", diss_winSize, " SNVs",
     " - logFC win of ", lfc_win, " genes"
   )
 )
 ```
-
-Circos plot:
-  - cube root the dissimilarity metric
-  - plot absolute logFC
-  
-Look at regulatory TFT datasets
-
-Try quasi likelihood for DE testing
-
-The window is called an elastic window
-  - Give a summary of window sizes
