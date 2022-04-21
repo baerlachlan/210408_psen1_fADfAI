@@ -370,7 +370,7 @@ div.tocify {
 <h1 class="title toc-ignore">Variants Analysis</h1>
 <h3 class="subtitle">210408_psen1_fADfAI dataset</h3>
 <h4 class="author">Lachlan Baer</h4>
-<h4 class="date">07 April, 2022</h4>
+<h4 class="date">21 April, 2022</h4>
 
 </div>
 
@@ -967,8 +967,7 @@ M
   levels() %&gt;%
   length() %&gt;%
   brewer.pal(&quot;Set1&quot;) %&gt;%
-  setNames(levels(metadata$genotype))
-compCols &lt;- genoCols[1:2]</code></pre>
+  setNames(levels(metadata$genotype))</code></pre>
 <pre class="r"><code>samples_byGroup &lt;- metadata %&gt;%
   split(f = .$genotype) %&gt;%
   sapply(function(x){
@@ -987,8 +986,8 @@ compCols &lt;- genoCols[1:2]</code></pre>
   set_names(c(&quot;EOfADvsWT&quot;, &quot;fAIvsWT&quot;))</code></pre>
 <pre class="r"><code>deGenes &lt;- sapply(topDE, dplyr::filter, DE, simplify = FALSE)</code></pre>
 </div>
-<div id="variation" class="section level1">
-<h1>Variation</h1>
+<div id="variation-between-groups" class="section level1">
+<h1>Variation between groups</h1>
 <pre class="r"><code>vcf_file &lt;- file.path(
   &quot;/hpcfs/users/a1647910/210408_psen1_fADfAI&quot;,
   &quot;analysis-variants/10_variants/6_select/all_samples.vcf.gz&quot;
@@ -1009,10 +1008,63 @@ gr &lt;- gr %&gt;%
 gt &lt;- geno(vcf)$GT %&gt;%
   as.data.frame() %&gt;%
   mutate(across(everything(), unphase_GTs))</code></pre>
-<div id="between-groups" class="section level2">
-<h2>Between groups</h2>
-<div id="allelic-dissimilarity" class="section level3">
-<h3>Allelic dissimilarity</h3>
+<div id="fold-change" class="section level2">
+<h2>Fold change</h2>
+<pre class="r"><code>lfc_winSize &lt;- 21
+lfc &lt;- lapply(topDE, function(x){
+  x %&gt;%
+    dplyr::select(
+      # Don&#39;t include strand because allelic differences between groups is consistent between strands
+      gene_id, gene_name, logFC, seqnames = chromosome, start, end, width
+    ) %&gt;%
+    dplyr::filter(seqnames %in% primary_chrs) %&gt;%
+    mutate(abs.logFC = abs(logFC)) %&gt;%
+    split(f = .$seqnames) %&gt;%
+    lapply(function(chr){
+      mutate(
+        chr,
+        lfc_rollmean = rollmean(abs.logFC, k = lfc_winSize, fill = NA),
+        win_start = lag(start, n = (lfc_winSize - 1) / 2),
+        win_end = lead(end, n = (lfc_winSize - 1) / 2),
+        win_size = abs(win_end - win_start)
+      )
+    }) %&gt;%
+    bind_rows() %&gt;%
+    GRanges()
+})</code></pre>
+<div id="elastic-window-ranges" class="section level3">
+<h3>Elastic window ranges</h3>
+<pre class="r"><code>lapply(seq_along(lfc), function(ind){
+  lfc[[ind]] %&gt;%
+    as_tibble() %&gt;%
+    dplyr::filter(!is.na(win_size)) %&gt;%
+    mutate(
+      comparison = factor(names(lfc[ind]), levels = names(lfc[1:4]))
+    )
+}) %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = &quot;black&quot;,
+    fill = &quot;grey70&quot;
+  ) +
+  scale_x_log10() +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    title = paste0(
+      &quot;Distribution of elastic window sizes generated from &quot;,
+      lfc_winSize,
+      &quot; genes&quot;
+    ),
+    x = &quot;Window size (bp)&quot;,
+    y = &quot;Count&quot;
+  )</code></pre>
+<p><img src="variants_files/figure-html/plot_lfc_winSize-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="reference-allele-dissimilarity" class="section level2">
+<h2>Reference allele dissimilarity</h2>
 <pre class="r"><code>allele_file &lt;- file.path(here(), &quot;files&quot;, &quot;allele_stats.Rds&quot;)</code></pre>
 <pre class="r"><code>## Takes 15-20 mins to run so .Rds saved for convenience
 if (!file.exists(allele_file)) {
@@ -1047,7 +1099,7 @@ if (!file.exists(allele_file)) {
 } else {
   allele_stats &lt;- readRDS(allele_file)
 }</code></pre>
-<pre class="r"><code>diss_win &lt;- 21
+<pre class="r"><code>diss_winSize &lt;- 21
 allele_diss &lt;- lapply(
   list(
     allele_stats[c(&quot;EOfAD-like/+&quot;, &quot;WT&quot;)],
@@ -1065,10 +1117,10 @@ allele_diss &lt;- lapply(
       lapply(function(chr){
         dplyr::mutate(
           chr,
-          diss_rollmean = rollmean(diss, k = diss_win, fill = NA),
-          qual_rollmean = rollmean(qual_ave, k = diss_win, fill = NA),
-          win_start = lag(start, n = (diss_win - 1) / 2),
-          win_end = lead(start, n = (diss_win - 1) / 2),
+          diss_rollmean = rollmean(diss, k = diss_winSize, fill = NA),
+          qual_rollmean = rollmean(qual_ave, k = diss_winSize, fill = NA),
+          win_start = lag(start, n = (diss_winSize - 1) / 2),
+          win_end = lead(start, n = (diss_winSize - 1) / 2),
           win_size = win_end - win_start
         ) %&gt;%
           dplyr::select(-c(diss, qual_ave))
@@ -1078,8 +1130,8 @@ allele_diss &lt;- lapply(
   }
 ) %&gt;%
   set_names(c(&quot;EOfADvsWT&quot;, &quot;fAIvsWT&quot;))</code></pre>
-<div id="window-sizes" class="section level4">
-<h4>Window sizes</h4>
+<div id="elastic-window-ranges-1" class="section level3">
+<h3>Elastic window ranges</h3>
 <pre class="r"><code>lapply(seq_along(allele_diss), function(ind){
   allele_diss[[ind]] %&gt;%
     as_tibble() %&gt;%
@@ -1100,69 +1152,27 @@ allele_diss &lt;- lapply(
   labs(
     title = paste0(
       &quot;Distribution of elastic window sizes generated from &quot;,
-      diss_win,
+      diss_winSize,
       &quot; SNVs&quot;
     ),
     x = &quot;Window size (bp)&quot;,
     y = &quot;Count&quot;
   )</code></pre>
-<p><img src="variants_files/figure-html/win_size-1.png" width="768" style="display: block; margin: auto;" /></p>
-</div>
-</div>
-<div id="logfc" class="section level3">
-<h3>logFC</h3>
-<pre class="r"><code>lfc_win &lt;- 21
-lfc &lt;- lapply(topDE, function(x){
+<p><img src="variants_files/figure-html/plot_diss_winSize-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>diss_winRanges &lt;- lapply(allele_diss, function(x){
   x %&gt;%
-    dplyr::select(
-      # Don&#39;t include strand because allelic differences between groups is consistent between strands
-      gene_id, gene_name, logFC, seqnames = chromosome, start, end, width
-    ) %&gt;%
-    dplyr::filter(seqnames %in% primary_chrs) %&gt;%
-    mutate(abs.logFC = abs(logFC)) %&gt;%
-    split(f = .$seqnames) %&gt;%
-    lapply(function(chr){
-      mutate(
-        chr,
-        lfc_rollmean = rollmean(abs.logFC, k = lfc_win, fill = NA),
-        win_start = lag(start, n = (lfc_win - 1) / 2),
-        win_end = lead(end, n = (lfc_win - 1) / 2),
-        win_size = abs(win_end - win_start)
-      )
-    }) %&gt;%
-    bind_rows() %&gt;%
-    GRanges()
-})</code></pre>
-<div id="window-sizes-1" class="section level4">
-<h4>Window sizes</h4>
-<pre class="r"><code>lapply(seq_along(lfc), function(ind){
-  lfc[[ind]] %&gt;%
     as_tibble() %&gt;%
     dplyr::filter(!is.na(win_size)) %&gt;%
-    mutate(
-      comparison = factor(names(lfc[ind]), levels = names(lfc[1:4]))
-    )
-}) %&gt;%
-  bind_rows() %&gt;%
-  ggplot(aes(win_size)) +
-  geom_histogram(
-    bins = 100,
-    colour = &quot;black&quot;,
-    fill = &quot;grey70&quot;
-  ) +
-  scale_x_log10() +
-  facet_wrap(~comparison, ncol = 2) +
-  labs(
-    title = paste0(
-      &quot;Distribution of elastic window sizes generated from &quot;,
-      diss_win,
-      &quot; genes&quot;
-    ),
-    x = &quot;Window size (bp)&quot;,
-    y = &quot;Count&quot;
-  )</code></pre>
-<p><img src="variants_files/figure-html/unnamed-chunk-2-1.png" width="768" style="display: block; margin: auto;" /></p>
-</div>
+    dplyr::select(
+      seqnames, start = win_start, end = win_end, width = win_size, strand,
+      diss_rollmean, qual_rollmean
+    ) %&gt;%
+    GRanges()
+})</code></pre>
+<pre class="r"><code>diss_winRanges_path &lt;- file.path(here(), &quot;files&quot;, &quot;diss_winRanges.Rds&quot;)
+if (!file.exists(diss_winRanges_path)) {
+  saveRDS(diss_winRanges, diss_winRanges_path)
+}</code></pre>
 </div>
 <div id="visualisation" class="section level3">
 <h3>Visualisation</h3>
@@ -1277,7 +1287,7 @@ lfc &lt;- lapply(topDE, function(x){
   )
 }</code></pre>
 <pre class="r"><code>chr &lt;- &quot;17&quot;
-ind &lt;- 2
+ind &lt;- 1
 plot_allele_diss(
   chr = chr,
   genes = genes[deGenes[[ind]]$gene_id],
@@ -1286,15 +1296,229 @@ plot_allele_diss(
   lfc = lfc[[ind]], lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
   title = paste0(
     names(allele_diss[ind]),
-    &quot; - dissimilarity win of &quot;, diss_win, &quot; SNVs&quot;,
-    &quot; - logFC win of &quot;, lfc_win, &quot; genes&quot;
+    &quot; - dissimilarity win of &quot;, diss_winSize, &quot; SNVs&quot;,
+    &quot; - logFC win of &quot;, lfc_winSize, &quot; genes&quot;
   )
 )</code></pre>
-<p><img src="variants_files/figure-html/plot1-1.png" width="768" style="display: block; margin: auto;" /></p>
-<p>Circos plot: - cube root the dissimilarity metric - plot absolute logFC</p>
-<p>Look at regulatory TFT datasets</p>
-<p>Try quasi likelihood for DE testing</p>
-<p>The window is called an elastic window - Give a summary of window sizes</p>
+<p><img src="variants_files/figure-html/dissPlot1-1.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="euclidean-distance" class="section level2">
+<h2>Euclidean distance</h2>
+<pre class="r"><code>allele_props &lt;- lapply(allele_stats, function(stats){
+  stats$allele_counts %&gt;%
+    bind_rows() %&gt;%
+    mutate(
+      across(
+        .cols = c(&quot;n_0&quot;, &quot;n_1&quot;, &quot;n_2&quot;, &quot;n_3&quot;),
+        .fns = ~ ifelse(n_called &gt; n_nocall, .x / n_called, NA)
+      )
+    ) %&gt;%
+    dplyr::select(-n_called, -n_nocall)
+})</code></pre>
+<pre class="r"><code>dist_winSize &lt;- 21
+allele_dist &lt;- lapply(
+  list(
+    allele_props[c(&quot;EOfAD-like/+&quot;, &quot;WT&quot;)],
+    allele_props[c(&quot;fAI-like/+&quot;, &quot;WT&quot;)]
+  ),
+  function(props){
+    dist &lt;- vapply(seq(length(gr)), function(ind){
+      rbind(props[[1]][ind,], props[[2]][ind,]) %&gt;%
+        dist() %&gt;%
+        as.numeric()
+    }, numeric(1))
+    gr %&gt;%
+      as_tibble() %&gt;%
+      mutate(dist = dist) %&gt;%
+      dplyr::filter(!is.na(dist)) %&gt;%
+      split(f = .$seqnames) %&gt;%
+      lapply(function(chr){
+        dplyr::mutate(
+          chr,
+          dist_rollmean = rollmean(dist, k = dist_winSize, fill = NA),
+          win_start = lag(start, n = (dist_winSize - 1) / 2),
+          win_end = lead(start, n = (dist_winSize - 1) / 2),
+          win_size = win_end - win_start
+        ) %&gt;%
+          dplyr::select(-c(dist))
+      }) %&gt;%
+      bind_rows() %&gt;%
+      GRanges()
+  }
+) %&gt;%
+  set_names(c(&quot;EOfADvsWT&quot;, &quot;fAIvsWT&quot;))</code></pre>
+<div id="elastic-window-ranges-2" class="section level3">
+<h3>Elastic window ranges</h3>
+<pre class="r"><code>lapply(seq_along(allele_dist), function(ind){
+  allele_dist[[ind]] %&gt;%
+    as_tibble() %&gt;%
+    dplyr::filter(!is.na(win_size)) %&gt;%
+    mutate(
+      comparison = factor(names(allele_dist[ind]), levels = names(allele_dist))
+    )
+}) %&gt;%
+  bind_rows() %&gt;%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = &quot;black&quot;,
+    fill = &quot;grey70&quot;
+  ) +
+  scale_x_log10() +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    title = paste0(
+      &quot;Distribution of elastic window sizes generated from &quot;,
+      dist_winSize,
+      &quot; SNVs&quot;
+    ),
+    x = &quot;Window size (bp)&quot;,
+    y = &quot;Count&quot;
+  )</code></pre>
+<p><img src="variants_files/figure-html/plot_dist_winSize-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>dist_winRanges &lt;- lapply(allele_dist, function(x){
+  x %&gt;%
+    as_tibble() %&gt;%
+    dplyr::filter(!is.na(win_size)) %&gt;%
+    dplyr::select(
+      seqnames, start = win_start, end = win_end, width = win_size, strand,
+      dist_rollmean
+    ) %&gt;%
+    GRanges()
+})</code></pre>
+<pre class="r"><code>dist_winRanges_path &lt;- file.path(here(), &quot;files&quot;, &quot;dist_winRanges.Rds&quot;)
+if (!file.exists(dist_winRanges_path)) {
+  saveRDS(dist_winRanges, dist_winRanges_path)
+}</code></pre>
+</div>
+<div id="visualisation-1" class="section level3">
+<h3>Visualisation</h3>
+<pre class="r"><code>plot_allele_dist &lt;- function(
+  chr, genes = GRanges(), mutation = GRanges(),
+  dist, dist_type = &quot;l&quot;, dist_trans = 1, highlight_genes = TRUE,
+  lfc = NULL, lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
+  title
+){
+  tracks &lt;- list()
+
+  if (length(mutation)) {
+    mutation &lt;- mutation %&gt;%
+      plyranges::filter(seqnames == chr) %&gt;%
+      plyranges::mutate(symbol = gene_name)
+    mutant_track &lt;- GeneRegionTrack(
+      range = mutation,
+      transcriptAnnotation = &quot;symbol&quot;,
+      col = &quot;white&quot;,
+      fill = &quot;white&quot;,
+      showTranscriptId = TRUE,
+      fontcolor.group = &quot;red&quot;,
+      cex.group = 0.6,
+      size = 0.3
+    )
+    tracks &lt;- append(tracks, mutant_track)
+  }
+
+  axis_track &lt;- GenomeAxisTrack(
+    add53 = TRUE,
+    add35 = TRUE,
+    name = paste0(&quot;Chr&quot;, chr),
+    showTitle = TRUE
+  )
+  if (length(mutation)) {
+    axis_track &lt;- HighlightTrack(
+      trackList = list(axis_track),
+      range = mutation
+    )
+  }
+  tracks &lt;- append(tracks, axis_track)
+
+  if (length(genes)) {
+    genes &lt;- genes %&gt;%
+      plyranges::filter(seqnames == chr) %&gt;%
+      plyranges::mutate(symbol = gene_name)
+    gene_track &lt;- GeneRegionTrack(
+      range = genes,
+      name = &quot;DE&quot;,
+      transcriptAnnotation = &quot;symbol&quot;,
+      showTranscriptId = TRUE,
+      fontcolor.group = 1,
+      cex.group = 0.5,
+      size = 0.3
+    )
+    tracks &lt;- append(tracks, gene_track)
+  }
+
+  dist_track &lt;- dist[,&quot;dist_rollmean&quot;] %&gt;%
+    plyranges::filter(seqnames == chr) %&gt;%
+    DataTrack(
+      type = dist_type,
+      name = &quot;Between-group genetic dissimilarity&quot;,
+      window = -1,
+      windowSize = 1,
+      col = &quot;grey30&quot;,
+      col.axis = &quot;black&quot;,
+      yTicksAt = seq(0, 1.4, 0.2),
+      ylim = c(0, 1.414214),  # 1.414214 is the maximum dist (e.g. c(1,0,0,0) vs c(0,0,1,0))
+      transformation = function(x){x^(dist_trans)}
+    )
+  if (highlight_genes) {
+    if (all(length(genes) &amp; length(mutation))) {
+      ranges &lt;- c(genes, mutation)
+    } else if (length(genes)) {
+      ranges &lt;- genes
+    } else if (length(mutation)) {
+      ranges &lt;- mutation
+    }
+    dist_track &lt;- HighlightTrack(
+      trackList = list(dist_track),
+      range = c(genes, mutation),
+      col = c(rep(&quot;#ffd1d1&quot;, length(genes)), rep(&quot;red&quot;, length(mutation))),
+      fill = c(rep(&quot;#ffd1d1&quot;, length(genes)), rep(&quot;red&quot;, length(mutation)))
+    )
+  }
+  tracks &lt;- append(tracks, dist_track)
+
+  if (length(lfc)) {
+    lfc_track &lt;- lfc[,&quot;lfc_rollmean&quot;] %&gt;%
+      plyranges::filter(seqnames == chr) %&gt;%
+      DataTrack(
+        type = lfc_type,
+        name = paste0(&quot;abs.logFC^(1/3)&quot;),
+        size = 1.5,
+        window = -1,
+        windowSize = 1,
+        col.axis = &quot;black&quot;,
+        showColorBar = TRUE,
+        gradient = viridis(100, option = &quot;D&quot;),
+        transformation = function(x){x^(lfc_trans)}
+      )
+    tracks &lt;- append(tracks, lfc_track)
+  }
+
+  plotTracks(
+    trackList = tracks,
+    main = title,
+    cex.main = 1,
+    col.title = &quot;black&quot;,
+    background.title = &quot;white&quot;
+  )
+}</code></pre>
+<pre class="r"><code>chr &lt;- &quot;17&quot;
+ind &lt;- 1
+plot_allele_dist(
+  chr = chr,
+  genes = genes[deGenes[[ind]]$gene_id],
+  mutation = genes[genes$gene_name == &quot;psen1&quot;],
+  dist = allele_dist[[ind]], dist_type = &quot;l&quot;, dist_trans = 1,
+  lfc = lfc[[ind]], lfc_type = &quot;heatmap&quot;, lfc_trans = 1/3,
+  title = paste0(
+    names(allele_dist[ind]),
+    &quot; - dissimilarity win of &quot;, dist_winSize, &quot; SNVs&quot;,
+    &quot; - logFC win of &quot;, lfc_winSize, &quot; genes&quot;
+  )
+)</code></pre>
+<p><img src="variants_files/figure-html/distPlot1-1.png" width="768" style="display: block; margin: auto;" /></p>
 </div>
 </div>
 </div>

@@ -68,7 +68,7 @@ source("~/bioinformatics/bioToolkit/lbFuncs.R")
 ## EnsDb
 
 ```{r ensParams}
-ens_species <- "Danio rerio"
+ens_species <- "Danio rerio"~~
 ens_release <- "101"
 ens_assembly <- "GRCz11"
 ```

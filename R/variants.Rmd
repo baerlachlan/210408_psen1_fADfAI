@@ -168,7 +168,7 @@ topDE <- readRDS(file.path(projDir, "files/topTables_cqn.Rds")) %>%
 deGenes <- sapply(topDE, dplyr::filter, DE, simplify = FALSE)
 ```
 
-# Variation
+# Variation between groups
 
 ```{r vcf}
 vcf_file <- file.path(
@@ -199,9 +199,65 @@ gt <- geno(vcf)$GT %>%
   mutate(across(everything(), unphase_GTs))
 ```
 
-## Between groups
+## Fold change
 
-### Allelic dissimilarity
+```{r lfc}
+lfc_winSize <- 21
+lfc <- lapply(topDE, function(x){
+  x %>%
+    dplyr::select(
+      # Don't include strand because allelic differences between groups is consistent between strands
+      gene_id, gene_name, logFC, seqnames = chromosome, start, end, width
+    ) %>%
+    dplyr::filter(seqnames %in% primary_chrs) %>%
+    mutate(abs.logFC = abs(logFC)) %>%
+    split(f = .$seqnames) %>%
+    lapply(function(chr){
+      mutate(
+        chr,
+        lfc_rollmean = rollmean(abs.logFC, k = lfc_winSize, fill = NA),
+        win_start = lag(start, n = (lfc_winSize - 1) / 2),
+        win_end = lead(end, n = (lfc_winSize - 1) / 2),
+        win_size = abs(win_end - win_start)
+      )
+    }) %>%
+    bind_rows() %>%
+    GRanges()
+})
+```
+
+### Elastic window ranges
+
+```{r plot_lfc_winSize}
+lapply(seq_along(lfc), function(ind){
+  lfc[[ind]] %>%
+    as_tibble() %>%
+    dplyr::filter(!is.na(win_size)) %>%
+    mutate(
+      comparison = factor(names(lfc[ind]), levels = names(lfc[1:4]))
+    )
+}) %>%
+  bind_rows() %>%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = "black",
+    fill = "grey70"
+  ) +
+  scale_x_log10() +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    title = paste0(
+      "Distribution of elastic window sizes generated from ",
+      lfc_winSize,
+      " genes"
+    ),
+    x = "Window size (bp)",
+    y = "Count"
+  )
+```
+
+## Reference allele dissimilarity
 
 ```{r allele_file}
 allele_file <- file.path(here(), "files", "allele_stats.Rds")
@@ -277,9 +333,9 @@ allele_diss <- lapply(
   set_names(c("EOfADvsWT", "fAIvsWT"))
 ```
 
-#### Elastic window ranges
+### Elastic window ranges
 
-```{r plot_snv_winSize}
+```{r plot_diss_winSize}
 lapply(seq_along(allele_diss), function(ind){
   allele_diss[[ind]] %>%
     as_tibble() %>%
@@ -311,13 +367,13 @@ lapply(seq_along(allele_diss), function(ind){
 ```{r diss_winRanges}
 diss_winRanges <- lapply(allele_diss, function(x){
   x %>%
-  as_tibble() %>%
-  dplyr::filter(!is.na(win_size)) %>%
-  dplyr::select(
-    seqnames, start = win_start, end = win_end, width = win_size, strand,
-    diss_rollmean, qual_rollmean
-  ) %>%
-  GRanges()
+    as_tibble() %>%
+    dplyr::filter(!is.na(win_size)) %>%
+    dplyr::select(
+      seqnames, start = win_start, end = win_end, width = win_size, strand,
+      diss_rollmean, qual_rollmean
+    ) %>%
+    GRanges()
 })
 ```
 
@@ -326,64 +382,6 @@ diss_winRanges_path <- file.path(here(), "files", "diss_winRanges.Rds")
 if (!file.exists(diss_winRanges_path)) {
   saveRDS(diss_winRanges, diss_winRanges_path)
 }
-```
-
-### logFC
-
-```{r lfc}
-lfc_win <- 21
-lfc <- lapply(topDE, function(x){
-  x %>%
-    dplyr::select(
-      # Don't include strand because allelic differences between groups is consistent between strands
-      gene_id, gene_name, logFC, seqnames = chromosome, start, end, width
-    ) %>%
-    dplyr::filter(seqnames %in% primary_chrs) %>%
-    mutate(abs.logFC = abs(logFC)) %>%
-    split(f = .$seqnames) %>%
-    lapply(function(chr){
-      mutate(
-        chr,
-        lfc_rollmean = rollmean(abs.logFC, k = lfc_win, fill = NA),
-        win_start = lag(start, n = (lfc_win - 1) / 2),
-        win_end = lead(end, n = (lfc_win - 1) / 2),
-        win_size = abs(win_end - win_start)
-      )
-    }) %>%
-    bind_rows() %>%
-    GRanges()
-})
-```
-
-#### Elastic window ranges
-
-```{r plot_lfc_winSize}
-lapply(seq_along(lfc), function(ind){
-  lfc[[ind]] %>%
-    as_tibble() %>%
-    dplyr::filter(!is.na(win_size)) %>%
-    mutate(
-      comparison = factor(names(lfc[ind]), levels = names(lfc[1:4]))
-    )
-}) %>%
-  bind_rows() %>%
-  ggplot(aes(win_size)) +
-  geom_histogram(
-    bins = 100,
-    colour = "black",
-    fill = "grey70"
-  ) +
-  scale_x_log10() +
-  facet_wrap(~comparison, ncol = 2) +
-  labs(
-    title = paste0(
-      "Distribution of elastic window sizes generated from ",
-      diss_winSize,
-      " genes"
-    ),
-    x = "Window size (bp)",
-    y = "Count"
-  )
 ```
 
 ### Visualisation
@@ -501,7 +499,7 @@ plot_allele_diss <- function(
 }
 ```
 
-```{r plot1}
+```{r dissPlot1}
 chr <- "17"
 ind <- 1
 plot_allele_diss(
@@ -513,7 +511,241 @@ plot_allele_diss(
   title = paste0(
     names(allele_diss[ind]),
     " - dissimilarity win of ", diss_winSize, " SNVs",
-    " - logFC win of ", lfc_win, " genes"
+    " - logFC win of ", lfc_winSize, " genes"
+  )
+)
+```
+
+## Euclidean distance
+
+```{r allele_props}
+allele_props <- lapply(allele_stats, function(stats){
+  stats$allele_counts %>%
+    bind_rows() %>%
+    mutate(
+      across(
+        .cols = c("n_0", "n_1", "n_2", "n_3"),
+        .fns = ~ ifelse(n_called > n_nocall, .x / n_called, NA)
+      )
+    ) %>%
+    dplyr::select(-n_called, -n_nocall)
+})
+```
+
+```{r allele_dist}
+dist_winSize <- 21
+allele_dist <- lapply(
+  list(
+    allele_props[c("EOfAD-like/+", "WT")],
+    allele_props[c("fAI-like/+", "WT")]
+  ),
+  function(props){
+    dist <- vapply(seq(length(gr)), function(ind){
+      rbind(props[[1]][ind,], props[[2]][ind,]) %>%
+        dist() %>%
+        as.numeric()
+    }, numeric(1))
+    gr %>%
+      as_tibble() %>%
+      mutate(dist = dist) %>%
+      dplyr::filter(!is.na(dist)) %>%
+      split(f = .$seqnames) %>%
+      lapply(function(chr){
+        dplyr::mutate(
+          chr,
+          dist_rollmean = rollmean(dist, k = dist_winSize, fill = NA),
+          win_start = lag(start, n = (dist_winSize - 1) / 2),
+          win_end = lead(start, n = (dist_winSize - 1) / 2),
+          win_size = win_end - win_start
+        ) %>%
+          dplyr::select(-c(dist))
+      }) %>%
+      bind_rows() %>%
+      GRanges()
+  }
+) %>%
+  set_names(c("EOfADvsWT", "fAIvsWT"))
+```
+
+### Elastic window ranges
+
+```{r plot_dist_winSize}
+lapply(seq_along(allele_dist), function(ind){
+  allele_dist[[ind]] %>%
+    as_tibble() %>%
+    dplyr::filter(!is.na(win_size)) %>%
+    mutate(
+      comparison = factor(names(allele_dist[ind]), levels = names(allele_dist))
+    )
+}) %>%
+  bind_rows() %>%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = "black",
+    fill = "grey70"
+  ) +
+  scale_x_log10() +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    title = paste0(
+      "Distribution of elastic window sizes generated from ",
+      dist_winSize,
+      " SNVs"
+    ),
+    x = "Window size (bp)",
+    y = "Count"
+  )
+```
+
+```{r dist_winRanges}
+dist_winRanges <- lapply(allele_dist, function(x){
+  x %>%
+    as_tibble() %>%
+    dplyr::filter(!is.na(win_size)) %>%
+    dplyr::select(
+      seqnames, start = win_start, end = win_end, width = win_size, strand,
+      dist_rollmean
+    ) %>%
+    GRanges()
+})
+```
+
+```{r save_dist_winRanges}
+dist_winRanges_path <- file.path(here(), "files", "dist_winRanges.Rds")
+if (!file.exists(dist_winRanges_path)) {
+  saveRDS(dist_winRanges, dist_winRanges_path)
+}
+```
+
+### Visualisation
+
+```{r plot_allele_dist}
+plot_allele_dist <- function(
+  chr, genes = GRanges(), mutation = GRanges(),
+  dist, dist_type = "l", dist_trans = 1, highlight_genes = TRUE,
+  lfc = NULL, lfc_type = "heatmap", lfc_trans = 1/3,
+  title
+){
+  tracks <- list()
+
+  if (length(mutation)) {
+    mutation <- mutation %>%
+      plyranges::filter(seqnames == chr) %>%
+      plyranges::mutate(symbol = gene_name)
+    mutant_track <- GeneRegionTrack(
+      range = mutation,
+      transcriptAnnotation = "symbol",
+      col = "white",
+      fill = "white",
+      showTranscriptId = TRUE,
+      fontcolor.group = "red",
+      cex.group = 0.6,
+      size = 0.3
+    )
+    tracks <- append(tracks, mutant_track)
+  }
+
+  axis_track <- GenomeAxisTrack(
+    add53 = TRUE,
+    add35 = TRUE,
+    name = paste0("Chr", chr),
+    showTitle = TRUE
+  )
+  if (length(mutation)) {
+    axis_track <- HighlightTrack(
+      trackList = list(axis_track),
+      range = mutation
+    )
+  }
+  tracks <- append(tracks, axis_track)
+
+  if (length(genes)) {
+    genes <- genes %>%
+      plyranges::filter(seqnames == chr) %>%
+      plyranges::mutate(symbol = gene_name)
+    gene_track <- GeneRegionTrack(
+      range = genes,
+      name = "DE",
+      transcriptAnnotation = "symbol",
+      showTranscriptId = TRUE,
+      fontcolor.group = 1,
+      cex.group = 0.5,
+      size = 0.3
+    )
+    tracks <- append(tracks, gene_track)
+  }
+
+  dist_track <- dist[,"dist_rollmean"] %>%
+    plyranges::filter(seqnames == chr) %>%
+    DataTrack(
+      type = dist_type,
+      name = "Between-group genetic dissimilarity",
+      window = -1,
+      windowSize = 1,
+      col = "grey30",
+      col.axis = "black",
+      yTicksAt = seq(0, 1.4, 0.2),
+      ylim = c(0, 1.414214),  # 1.414214 is the maximum dist (e.g. c(1,0,0,0) vs c(0,0,1,0))
+      transformation = function(x){x^(dist_trans)}
+    )
+  if (highlight_genes) {
+    if (all(length(genes) & length(mutation))) {
+      ranges <- c(genes, mutation)
+    } else if (length(genes)) {
+      ranges <- genes
+    } else if (length(mutation)) {
+      ranges <- mutation
+    }
+    dist_track <- HighlightTrack(
+      trackList = list(dist_track),
+      range = c(genes, mutation),
+      col = c(rep("#ffd1d1", length(genes)), rep("red", length(mutation))),
+      fill = c(rep("#ffd1d1", length(genes)), rep("red", length(mutation)))
+    )
+  }
+  tracks <- append(tracks, dist_track)
+
+  if (length(lfc)) {
+    lfc_track <- lfc[,"lfc_rollmean"] %>%
+      plyranges::filter(seqnames == chr) %>%
+      DataTrack(
+        type = lfc_type,
+        name = paste0("abs.logFC^(1/3)"),
+        size = 1.5,
+        window = -1,
+        windowSize = 1,
+        col.axis = "black",
+        showColorBar = TRUE,
+        gradient = viridis(100, option = "D"),
+        transformation = function(x){x^(lfc_trans)}
+      )
+    tracks <- append(tracks, lfc_track)
+  }
+
+  plotTracks(
+    trackList = tracks,
+    main = title,
+    cex.main = 1,
+    col.title = "black",
+    background.title = "white"
+  )
+}
+```
+
+```{r distPlot1}
+chr <- "17"
+ind <- 1
+plot_allele_dist(
+  chr = chr,
+  genes = genes[deGenes[[ind]]$gene_id],
+  mutation = genes[genes$gene_name == "psen1"],
+  dist = allele_dist[[ind]], dist_type = "l", dist_trans = 1,
+  lfc = lfc[[ind]], lfc_type = "heatmap", lfc_trans = 1/3,
+  title = paste0(
+    names(allele_dist[ind]),
+    " - dissimilarity win of ", dist_winSize, " SNVs",
+    " - logFC win of ", lfc_winSize, " genes"
   )
 )
 ```
