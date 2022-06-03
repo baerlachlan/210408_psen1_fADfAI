@@ -8,12 +8,12 @@
 *.vcf.gz
 *.vcf.gz.tbi
 
-## Snakemake or python related
+## Python or snakemake workflow related
 */.snakemake/
-*/smk/log/
-*/workflow/log
 *__pycache__*
 *.snakemake_timestamp
+*/workflow/log
+*/resources
 
 ## Project-specific files
 *fgsea*.Rds

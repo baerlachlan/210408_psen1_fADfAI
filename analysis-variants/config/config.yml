@@ -1,0 +1,29 @@
+samples_tsv:
+
+fastq_ext: ".fastq.gz"
+
+pair_tags: ["_R1", "_R2"]
+
+ref:
+  species: "danio_rerio"
+  assembly: "GRCz11"
+  ensembl_release: 101
+
+align:
+  read_length: 100
+
+umi:
+  activate: True
+  add_header:
+    activate: True
+    tag: "_I1"
+
+merge_samples:
+  activate: True
+  tags: ["_L001", "_L002"]
+
+bootstrap_known_variants:
+  activate: False
+
+ase_counts:
+  activate: False
