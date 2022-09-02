@@ -33,7 +33,7 @@ STAR   --runThreadN 16   --genomeDir resources/star   --readFilesIn results/02_t
 Number of fastq files for each mate = 1
 
    Input read files for mate 1 :
--rw-rw-r-- 1 a1647910 a1647910 2716618229 May 12 14:38 results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz
+-rw-rw-r-- 1 a1647910 a1647910 2716618209 Aug 11 13:32 results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz
 
    readsCommandsFile:
 exec > "results/03_align/bam/18_KB_C2_L002_STARtmp/tmp.fifo.read1"
@@ -42,7 +42,7 @@ gunzip -c      "results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz"
 
 
    Input read files for mate 2 :
--rw-rw-r-- 1 a1647910 a1647910 2841774844 May 12 14:38 results/02_trim/fastq/18_KB_C2_L002_R2.fastq.gz
+-rw-rw-r-- 1 a1647910 a1647910 2841774824 Aug 11 13:32 results/02_trim/fastq/18_KB_C2_L002_R2.fastq.gz
 
    readsCommandsFile:
 exec > "results/03_align/bam/18_KB_C2_L002_STARtmp/tmp.fifo.read2"
@@ -1065,7 +1065,7 @@ Number of real (reference) chromosomes= 993
 991	KN150216.1	1020	1601961984
 992	KN150481.1	1008	1602224128
 993	KN150525.1	650	1602486272
-Started loading the genome: Thu May 12 15:11:09 2022
+Started loading the genome: Thu Aug 11 13:32:14 2022
 
 Genome: size given as a parameter = 1653106958
 SA: size given as a parameter = 11705721913
@@ -1079,7 +1079,7 @@ Loading Genome ... done! state: good=1 eof=0 fail=0 bad=0; loaded 1653106958 byt
 SA file size: 11705721913 bytes; state: good=1 eof=0 fail=0 bad=0
 Loading SA ... done! state: good=1 eof=0 fail=0 bad=0; loaded 11705721913 bytes
 Loading SAindex ... done: 1565873619 bytes
-Finished loading the genome: Thu May 12 15:11:21 2022
+Finished loading the genome: Thu Aug 11 13:32:28 2022
 
 Processing splice junctions database sjdbN=253058,   pGe.sjdbOverhang=99 
 alignIntronMax=alignMatesGapMax=0, the max intron size will be approximately determined by (2^winBinNbits)*winAnchorDistNbins=589824
@@ -1090,10 +1090,10 @@ Created thread # 4
 Created thread # 5
 Created thread # 6
 Created thread # 7
+Created thread # 8
 Starting to map file # 0
 mate 1:   results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz
 mate 2:   results/02_trim/fastq/18_KB_C2_L002_R2.fastq.gz
-Created thread # 8
 Created thread # 9
 Created thread # 10
 Created thread # 11
@@ -1101,23 +1101,23 @@ Created thread # 12
 Created thread # 13
 Created thread # 14
 Created thread # 15
-Thread #8 end of input stream, nextChar=-1
-Completed: thread #15
-Completed: thread #5
-Completed: thread #1
-Completed: thread #8
-Completed: thread #11
-Completed: thread #3
-Completed: thread #6
-Completed: thread #4
-Completed: thread #12
-Completed: thread #14
-Completed: thread #2
-Completed: thread #9
-Completed: thread #10
-Completed: thread #7
+Thread #13 end of input stream, nextChar=-1
 Completed: thread #13
+Completed: thread #3
+Completed: thread #4
+Completed: thread #6
+Completed: thread #5
+Completed: thread #10
+Completed: thread #2
+Completed: thread #12
+Completed: thread #8
+Completed: thread #9
+Completed: thread #14
+Completed: thread #7
 Completed: thread #0
+Completed: thread #15
+Completed: thread #11
+Completed: thread #1
 Joined thread # 1
 Joined thread # 2
 Joined thread # 3
@@ -1133,9 +1133,9 @@ Joined thread # 12
 Joined thread # 13
 Joined thread # 14
 Joined thread # 15
-May 12 15:17:32   Loaded database junctions from the generated genome resources/star//sjdbList.out.tab: 253058 total junctions
+Aug 11 13:39:48   Loaded database junctions from the generated genome resources/star//sjdbList.out.tab: 253058 total junctions
 
-May 12 15:17:32   Loaded database junctions from the 1st pass file: results/03_align/bam/18_KB_C2_L002_STARpass1//SJ.out.tab: 525374 total junctions
+Aug 11 13:39:48   Loaded database junctions from the 1st pass file: results/03_align/bam/18_KB_C2_L002_STARpass1//SJ.out.tab: 525374 total junctions
 
 WARNING: long repeat for junction # 15588 : 10 19596636 19597001; left shift = 255; right shift = 58
 WARNING: long repeat for junction # 49248 : 14 2194821 2201680; left shift = 255; right shift = 67
@@ -1145,18 +1145,18 @@ WARNING: long repeat for junction # 130121 : 21 25216740 25219252; left shift = 
 WARNING: long repeat for junction # 305160 : 14 2194821 2201680; left shift = 255; right shift = 67
 WARNING: long repeat for junction # 319019 : 15 29652210 29666695; left shift = 33; right shift = 255
 WARNING: long repeat for junction # 391354 : 21 25216740 25219252; left shift = 255; right shift = 23
-May 12 15:17:32   Finished preparing junctions
-May 12 15:17:32 ..... inserting junctions into the genome indices
-May 12 15:17:39   Finished SA search: number of new junctions=82998, old junctions=253058
-May 12 15:17:47   Finished sorting SA indicesL nInd=32839982
+Aug 11 13:39:49   Finished preparing junctions
+Aug 11 13:39:49 ..... inserting junctions into the genome indices
+Aug 11 13:39:57   Finished SA search: number of new junctions=82998, old junctions=253058
+Aug 11 13:40:07   Finished sorting SA indicesL nInd=32839982
 Genome size with junctions=1669623560  1602748416   66875144
 GstrandBit1=32   GstrandBit=32
-May 12 15:18:22   Finished inserting junction indices
-May 12 15:18:30   Finished SAi
-May 12 15:18:30 ..... finished inserting junctions into genome
+Aug 11 13:40:50   Finished inserting junction indices
+Aug 11 13:41:00   Finished SAi
+Aug 11 13:41:01 ..... finished inserting junctions into genome
 
    Input read files for mate 1 :
--rw-rw-r-- 1 a1647910 a1647910 2716618229 May 12 14:38 results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz
+-rw-rw-r-- 1 a1647910 a1647910 2716618209 Aug 11 13:32 results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz
 
    readsCommandsFile:
 exec > "results/03_align/bam/18_KB_C2_L002_STARtmp/tmp.fifo.read1"
@@ -1165,7 +1165,7 @@ gunzip -c      "results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz"
 
 
    Input read files for mate 2 :
--rw-rw-r-- 1 a1647910 a1647910 2841774844 May 12 14:38 results/02_trim/fastq/18_KB_C2_L002_R2.fastq.gz
+-rw-rw-r-- 1 a1647910 a1647910 2841774824 Aug 11 13:32 results/02_trim/fastq/18_KB_C2_L002_R2.fastq.gz
 
    readsCommandsFile:
 exec > "results/03_align/bam/18_KB_C2_L002_STARtmp/tmp.fifo.read2"
@@ -1180,38 +1180,38 @@ Created thread # 5
 Created thread # 6
 Created thread # 7
 Created thread # 8
+Created thread # 9
 Starting to map file # 0
 mate 1:   results/02_trim/fastq/18_KB_C2_L002_R1.fastq.gz
 mate 2:   results/02_trim/fastq/18_KB_C2_L002_R2.fastq.gz
-Created thread # 9
 Created thread # 10
 Created thread # 11
 Created thread # 12
 Created thread # 13
 Created thread # 14
 Created thread # 15
-Thread #10 end of input stream, nextChar=-1
-Completed: thread #10
-Completed: thread #9
-Completed: thread #0
-Completed: thread #8
+Thread #14 end of input stream, nextChar=-1
+Completed: thread #14
 Completed: thread #3
-Completed: thread #5
-Completed: thread #13
+Completed: thread #9
+Completed: thread #11
 Completed: thread #2
+Completed: thread #6
+Completed: thread #15
+Completed: thread #4
+Completed: thread #8
 Completed: thread #7
+Completed: thread #10
+Completed: thread #12
+Completed: thread #0
+Completed: thread #13
 Completed: thread #1
 Joined thread # 1
 Joined thread # 2
 Joined thread # 3
-Completed: thread #14
-Completed: thread #12
-Completed: thread #15
-Completed: thread #4
 Joined thread # 4
+Completed: thread #5
 Joined thread # 5
-Completed: thread #11
-Completed: thread #6
 Joined thread # 6
 Joined thread # 7
 Joined thread # 8

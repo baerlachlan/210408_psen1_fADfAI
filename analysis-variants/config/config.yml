@@ -26,4 +26,4 @@ bootstrap_known_variants:
   activate: False
 
 ase_counts:
-  activate: False
+  activate: True
