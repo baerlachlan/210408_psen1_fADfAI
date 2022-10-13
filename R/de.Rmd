@@ -313,7 +313,7 @@ topTables <- colnames(design)[2:3] %>%
       mutate(
         coef = x,
         bonfP = p.adjust(PValue, "bonf"),
-        DE = ifelse(FDR < 0.15, TRUE, FALSE)
+        DE = ifelse(FDR < 0.05, TRUE, FALSE)
       )
   }, simplify = FALSE)
 ```
@@ -531,7 +531,7 @@ topTables_cqn <- colnames(design)[2:3] %>%
       mutate(
         coef = x,
         bonfP = p.adjust(PValue, "bonf"),
-        DE = ifelse(FDR < 0.15, TRUE, FALSE)
+        DE = ifelse(FDR < 0.05, TRUE, FALSE)
       )
   }, simplify = FALSE)
 ```
@@ -932,78 +932,3 @@ saveRDS(topTables_cqn, here("files/topTables_cqn.Rds"))
 sessionInfo() %>%
   pander()
 ```
-
-# Publication plots
-
-```{r}
-tt <- topTables_cqn$`fAI-like/+`
-man <- tt %>%
-  mutate(mid = (start + end) / 2) %>%
-  dplyr::select(gene_id, gene_name, chromosome, mid, FDR) %>%
-  dplyr::filter(!(chromosome %in% c("X", "Y", "MT"))) %>%
-  group_by(chromosome) %>%
-  summarise(chrLen = max(mid)) %>%
-  mutate(chrSt = cumsum(chrLen)-chrLen) %>%
-  dplyr::select(-chrLen) %>% 
-  left_join(tt) %>%
-  mutate(mid = (start + end) / 2) %>%
-  mutate(midCum = chrSt + mid) %>%
-  mutate(
-    colour = ifelse(chromosome %in% primary_chrs[c(TRUE, FALSE)], "a", "b"),
-    colour = ifelse(chromosome == "17", "c", colour)
-  )
-axis <- man %>%
-  group_by(chromosome) %>%
-  summarise(center = (max(midCum) + min(midCum)) / 2)
-a <- ggplot(man, aes(x = midCum, y = -log10(PValue))) +
-  geom_point(
-    data = man %>%
-      dplyr::filter(!DE),
-    aes(colour = colour),
-    shape = 20,
-    alpha = 1,
-    size = 1
-  ) +
-  scale_colour_manual(values = c("grey50", "grey80", "red")) +
-  geom_point(
-    data = man %>%
-      dplyr::filter(DE),
-    aes(fill = colour),
-    colour = "black",
-    shape = 23,
-    alpha = 1,
-    size = 1,
-    stroke = 0.3
-  ) +
-  scale_fill_manual(values = c("grey50", "grey80", "red")) +
-  scale_x_continuous(label = axis$chromosome, breaks = axis$center) +
-  scale_y_continuous(expand = c(0, 0)) +
-  coord_cartesian(clip = "off") +
-  labs(
-    x = "Chromosome",
-    y = expression(paste(-log[10], "(p)"))
-  ) +
-  theme(
-    legend.position="none",
-    panel.border = element_blank(),
-    panel.grid.major.x = element_blank(),
-    panel.grid.minor.x = element_blank(),
-    axis.text = element_text(size = rel(0.8)),
-    axis.title = element_text(size = rel(0.8))
-  )
-```
-
-```{r}
-ggarrange(a, ncol = 1)
-```
-
-```{r}
-ggsave(
-  "~/phd/publications/fisher/figures/figure_2.png",
-  device = "png",
-  width = 18,
-  height = 6,
-  units = "cm"
-)
-```
-
