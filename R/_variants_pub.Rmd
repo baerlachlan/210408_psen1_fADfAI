@@ -30,143 +30,232 @@ knitr::opts_knit$set(root.dir = rprojroot::find_rstudio_root_file())
 
 # Publication plots
 
+# Figure 5 - DAR along chromosome 7
+
 ```{r}
-# get_trackList <- function(
-    #     chr, genes = GRanges(), mutation = GRanges(),
-#     dist, dist_type = "l", dist_trans = 1, highlight_genes = TRUE,
-#     lfc = NULL, lfc_type = "heatmap", lfc_trans = 1/3,
-#     title
-# ){
-#   tracks <- list()
-#   
-#   if (length(mutation)) {
-#     mutation <- mutation %>%
-#       plyranges::filter(seqnames == chr) %>%
-#       plyranges::mutate(symbol = gene_name)
-#     mutant_track <- GeneRegionTrack(
-#       range = mutation,
-#       transcriptAnnotation = "symbol",
-#       col = "white",
-#       fill = "white",
-#       showTranscriptId = TRUE,
-#       fontcolor.group = "red",
-#       cex.group = 0.6,
-#       size = 0.3
-#     )
-#     tracks <- append(tracks, mutant_track)
-#   }
-#   
-#   axis_track <- GenomeAxisTrack(
-#     add53 = TRUE,
-#     add35 = TRUE,
-#     name = paste0("Chr", chr),
-#     showTitle = TRUE
-#   )
-#   if (length(mutation)) {
-#     axis_track <- HighlightTrack(
-#       trackList = list(axis_track),
-#       range = mutation
-#     )
-#   }
-#   tracks <- append(tracks, axis_track)
-#   
-#   if (length(genes)) {
-#     genes <- genes %>%
-#       plyranges::filter(seqnames == chr) %>%
-#       plyranges::mutate(symbol = gene_name)
-#     gene_track <- GeneRegionTrack(
-#       range = genes,
-#       name = "DE",
-#       transcriptAnnotation = "symbol",
-#       showTranscriptId = TRUE,
-#       fontcolor.group = 1,
-#       cex.group = 0.5,
-#       size = 0.3
-#     )
-#     tracks <- append(tracks, gene_track)
-#   }
-#   
-#   dist_track <- dist[,"diversity"] %>%
-#     plyranges::filter(seqnames == chr) %>%
-#     DataTrack(
-#       type = dist_type,
-#       name = "Between-group genetic dissimilarity",
-#       window = -1,
-#       windowSize = 1,
-#       col = "grey30",
-#       col.axis = "black",
-#       yTicksAt = seq(0, 1, 0.1),
-#       ylim = c(0, 1),
-#       transformation = function(x){x^(dist_trans)}
-#     )
-#   if (highlight_genes) {
-#     if (all(length(genes) & length(mutation))) {
-#       ranges <- c(genes, mutation)
-#     } else if (length(genes)) {
-#       ranges <- genes
-#     } else if (length(mutation)) {
-#       ranges <- mutation
-#     }
-#     dist_track <- HighlightTrack(
-#       trackList = list(dist_track),
-#       range = c(genes, mutation),
-#       col = c(rep("#ffd1d1", length(genes)), rep("red", length(mutation))),
-#       fill = c(rep("#ffd1d1", length(genes)), rep("red", length(mutation)))
-#     )
-#   }
-#   tracks <- append(tracks, dist_track)
-#   
-#   if (length(lfc)) {
-#     lfc_track <- lfc[,"lfc_rollmean"] %>%
-#       plyranges::filter(seqnames == chr) %>%
-#       DataTrack(
-#         type = lfc_type,
-#         name = paste0("abs.logFC^(1/3)"),
-#         size = 1.5,
-#         window = -1,
-#         windowSize = 1,
-#         col.axis = "black",
-#         showColorBar = TRUE,
-#         gradient = viridis(100, option = "D"),
-#         transformation = function(x){x^(lfc_trans)}
-#       )
-#     tracks <- append(tracks, lfc_track)
-#   }
-#   
-#   tracks
-# }
+png(
+  filename = "~/phd/publications/fisher_pub/figures/figure_5.png",
+  width = 32,
+  height = 24,
+  units = "cm",
+  res = 300
+)
 ```
 
 ```{r}
-# chr <- "17"
-# ind <- 1
-# a <- as.ggplot(
-#   ~plotTracks(
-#     get_trackList(
-#       chr = chr,
-#       genes = genes[deGenes[[ind]]$gene_id],
-#       mutation = genes[genes$gene_name == "psen1"],
-#       dist = allele_dist[[ind]], dist_type = "l", dist_trans = 1,
-#       lfc = lfc[[ind]], lfc_type = "heatmap", lfc_trans = 1/3,
-#       title = ""
-#     ),
-#     cex.main = 0.5,
-#     col.title = "black",
-#     background.title = "white"
-#   )
-# )
+ind <- 1
+chr <- 17
+genes_plot <- genes[deGenes[[ind]]$gene_id]
+mutation <- genes[genes$gene_name == "psen1"]
+dist <- allele_dist[[ind]]
+dist_type <- "l"
+dist_trans <- 1
+highlight_genes <- TRUE
+lfc_plot <- lfc[[ind]]
+lfc_type <- "heatmap"
+lfc_trans <- 1/3
+
+tracks <- list()
+
+if (length(mutation)) {
+  mutation <- mutation %>%
+    plyranges::filter(seqnames == chr) %>%
+    plyranges::mutate(symbol = gene_name)
+  mutant_track <- GeneRegionTrack(
+    range = mutation,
+    transcriptAnnotation = "symbol",
+    col = "white",
+    fill = "white",
+    showTranscriptId = TRUE,
+    fontcolor.group = "red",
+    cex.group = 0.6,
+    size = 0.5,
+    name = NULL
+  )
+  tracks <- append(tracks, mutant_track)
+}
+
+axis_track <- GenomeAxisTrack(
+  add53 = TRUE,
+  add35 = TRUE,
+  name = paste0("Chr ", chr),
+  showTitle = TRUE,
+  size = 1.2
+)
+if (length(mutation)) {
+  axis_track <- HighlightTrack(
+    trackList = list(axis_track),
+    range = mutation
+  )
+}
+tracks <- append(tracks, axis_track)
+
+# === EOfAD ===
+
+title_track <- DataTrack(NULL, name = "A", size = 1.5, rotation.title = 0, fontsize.title = 25)
+tracks <- append(tracks, title_track)
+
+# Plot all DE genes on separate track because the names are overlapping
+if (length(genes_plot)) {
+  genes_plot <- genes_plot %>%
+    plyranges::filter(seqnames == chr) %>%
+    plyranges::mutate(symbol = gene_name)
+  lapply(seq_along(genes_plot), function(i){
+    mid <- floor(length(genes_plot) / 2)
+    if (i == mid) {
+      name <- "DE"
+    } else {
+      name <- ""
+    }
+    gene_track <- GeneRegionTrack(
+      range = genes_plot[i,],
+      name = name,
+      geneSymbols = TRUE,
+      fontcolor.group = 1,
+      cex.group = 0.5,
+      size = 2 / length(genes_plot),
+      fill.title = "transparent"
+    )
+    tracks <<- append(tracks, gene_track)
+  })
+}
+
+dist_track <- dist[,"diversity"] %>%
+  plyranges::filter(seqnames == chr) %>%
+  DataTrack(
+    type = dist_type,
+    name = "DAR",
+    size = 8,
+    window = -1,
+    windowSize = 1,
+    col = "grey30",
+    col.axis = "black",
+    yTicksAt = seq(0, 1, 0.1),
+    ylim = c(0, 1),
+    transformation = function(x){x^(dist_trans)}
+  )
+if (highlight_genes) {
+  if (all(length(genes_plot) & length(mutation))) {
+    ranges <- c(genes_plot, mutation)
+  } else if (length(genes_plot)) {
+    ranges <- genes_plot
+  } else if (length(mutation)) {
+    ranges <- mutation
+  }
+  dist_track <- HighlightTrack(
+    trackList = list(dist_track),
+    range = c(genes_plot, mutation),
+    col = c(rep("#ffd1d1", length(genes_plot)), rep("red", length(mutation))),
+    fill = c(rep("#ffd1d1", length(genes_plot)), rep("red", length(mutation)))
+  )
+}
+tracks <- append(tracks, dist_track)
+
+if (length(lfc_plot)) {
+  lfc_track <- lfc_plot[,"lfc_rollmean"] %>%
+    plyranges::filter(seqnames == chr) %>%
+    DataTrack(
+      type = lfc_type,
+      name = paste0("logFC"),
+      size = 2,
+      window = -1,
+      windowSize = 1,
+      col.axis = "black",
+      showColorBar = TRUE,
+      gradient = viridis(100, option = "D"),
+      transformation = function(x){x^(lfc_trans)}
+    )
+  tracks <- append(tracks, lfc_track)
+}
+
+# === fAI ===
+
+title_track <- DataTrack(NULL, name = "B", size = 1.5, rotation.title = 0, fontsize.title = 25)
+tracks <- append(tracks, title_track)
+
+ind <- 2
+genes_plot <- genes[deGenes[[ind]]$gene_id]
+dist <- allele_dist[[ind]]
+lfc_plot <- lfc[[ind]]
+
+if (length(genes_plot)) {
+  genes_plot <- genes_plot %>%
+    plyranges::filter(seqnames == chr) %>%
+    plyranges::mutate(symbol = gene_name)
+  gene_track <- GeneRegionTrack(
+    range = genes_plot,
+    name = "DE",
+    transcriptAnnotation = "symbol",
+    showTranscriptId = TRUE,
+    fontcolor.group = 1,
+    cex.group = 0.5,
+    size = 0.5
+  )
+  tracks <- append(tracks, gene_track)
+}
+
+dist_track <- dist[,"diversity"] %>%
+  plyranges::filter(seqnames == chr) %>%
+  DataTrack(
+    type = dist_type,
+    name = "DAR",
+    size = 8,
+    window = -1,
+    windowSize = 1,
+    col = "grey30",
+    col.axis = "black",
+    yTicksAt = seq(0, 1, 0.1),
+    ylim = c(0, 1),
+    transformation = function(x){x^(dist_trans)}
+  )
+if (highlight_genes) {
+  if (all(length(genes_plot) & length(mutation))) {
+    ranges <- c(genes_plot, mutation)
+  } else if (length(genes_plot)) {
+    ranges <- genes_plot
+  } else if (length(mutation)) {
+    ranges <- mutation
+  }
+  dist_track <- HighlightTrack(
+    trackList = list(dist_track),
+    range = c(genes_plot, mutation),
+    col = c(rep("#ffd1d1", length(genes_plot)), rep("red", length(mutation))),
+    fill = c(rep("#ffd1d1", length(genes_plot)), rep("red", length(mutation)))
+  )
+}
+tracks <- append(tracks, dist_track)
+
+if (length(lfc_plot)) {
+  lfc_track <- lfc_plot[,"lfc_rollmean"] %>%
+    plyranges::filter(seqnames == chr) %>%
+    DataTrack(
+      type = lfc_type,
+      name = paste0("logFC"),
+      size = 2,
+      window = -1,
+      windowSize = 1,
+      col.axis = "black",
+      showColorBar = TRUE,
+      gradient = viridis(100, option = "D"),
+      transformation = function(x){x^(lfc_trans)}
+    )
+  tracks <- append(tracks, lfc_track)
+}
+
+plotTracks(
+  trackList = tracks,
+  cex.main = 1,
+  cex.title = 0.6,
+  col.title = "black",
+  background.title = "white"
+)
 ```
 
 ```{r}
-# ggsave(
-#   "~/phd/publications/fisher/figures/figure_5.png",
-#   device = "png",
-#   width = 18,
-#   height = 6,
-#   units = "cm",
-#   plot = as.grob(a)
-# )
+dev.off()
 ```
+
+## Tmp 
 
 ```{r}
 plot_for_pub <- function(
@@ -227,7 +316,8 @@ plot_for_pub <- function(
         geneSymbols = TRUE,
         fontcolor.group = 1,
         cex.group = 0.5,
-        size = 2 / length(genes)
+        size = 2 / length(genes),
+        background.title = "transparent" 
       )
       tracks <<- append(tracks, gene_track)
     })
