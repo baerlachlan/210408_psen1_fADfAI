@@ -99,7 +99,7 @@ tracks <- append(tracks, title_track)
 if (length(genes_plot)) {
   genes_plot <- genes_plot %>%
     plyranges::filter(seqnames == chr) %>%
-    plyranges::mutate(symbol = gene_name)
+    plyranges::mutate(gene_name = paste0(gene_name, "   "))
   lapply(seq_along(genes_plot), function(i){
     mid <- floor(length(genes_plot) / 2)
     if (i == mid) {
@@ -107,14 +107,19 @@ if (length(genes_plot)) {
     } else {
       name <- ""
     }
-    gene_track <- GeneRegionTrack(
+    gene_track <- AnnotationTrack(
       range = genes_plot[i,],
       name = name,
-      geneSymbols = TRUE,
-      fontcolor.group = 1,
       cex.group = 0.5,
       size = 2 / length(genes_plot),
-      fill.title = "transparent"
+      shape = "box",
+      fill = "darkgray",
+      group = genes_plot[i,]$gene_name,
+      groupAnnotation = "group",
+      fontface.group = 1,
+      fontcolor.group = 1,
+      cex.group = 0.5,
+      size = 0.5
     )
     tracks <<- append(tracks, gene_track)
   })
@@ -180,13 +185,15 @@ lfc_plot <- lfc[[ind]]
 
 if (length(genes_plot)) {
   genes_plot <- genes_plot %>%
-    plyranges::filter(seqnames == chr) %>%
-    plyranges::mutate(symbol = gene_name)
-  gene_track <- GeneRegionTrack(
+    plyranges::filter(seqnames == chr)
+  gene_track <- AnnotationTrack(
     range = genes_plot,
     name = "DE",
-    transcriptAnnotation = "symbol",
-    showTranscriptId = TRUE,
+    shape = "box",
+    fill = "darkgray",
+    group = genes_plot$gene_name,
+    groupAnnotation = "group",
+    fontface.group = 1,
     fontcolor.group = 1,
     cex.group = 0.5,
     size = 0.5
