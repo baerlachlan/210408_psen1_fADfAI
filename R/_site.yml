@@ -1,22 +1,19 @@
-name: "210408_psen1_fADfAI_snv"
+name: "210408_psen1_fADfAI"
 output_dir: ../docs
-exclude: ["*snv_profiles.Rmd", "*variants.Rmd"]
 navbar:
-  title: "210408_psen1_fADfAI_snv"
+  title: "210408_psen1_fADfAI"
   left:
     - text: Home
       href: index.html
-    - text: DE analysis
-      href: de_analysis.html
-    - text: DE enrichment
-      href: de_enrichment.html
-    - text: ASE QC
-      href: ase_qc.html
-    - text: ASE analysis
-      href: ase_analysis.html
+    - text: DE
+      href: de.html
+    - text: DAR
+      href: dar.html
+    - text: Enrichment
+      href: enrichment.html
   right:
     - icon: fa-github
-      href: https://github.com/baerlachlan/210408_psen1_fADfAI_snv
+      href: https://github.com/baerlachlan/210408_psen1_fADfAI
 output:
   html_document:
     theme: flatly
