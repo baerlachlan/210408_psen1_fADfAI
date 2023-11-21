@@ -308,3 +308,43 @@ ggsave(
   units = "cm"
 )
 ```
+
+
+
+# Supp - Window sizes
+
+```{r}
+DAR <- set_names(DAR, c("T428del/+ vs +/+", "W233fs/+ vs +/+"))
+lapply(seq_along(DAR), function(ind){
+  DAR[[ind]] %>%
+    as_tibble() %>%
+    dplyr::filter(!is.na(win_size)) %>%
+    mutate(
+      comparison = factor(names(DAR[ind]), levels = names(DAR))
+    )
+}) %>%
+  bind_rows() %>%
+  mutate(comparison = str_replace(comparison, "_", " ")) %>%
+  ggplot(aes(win_size)) +
+  geom_histogram(
+    bins = 100,
+    colour = "black",
+    fill = "grey70"
+  ) +
+  scale_x_log10(labels = function(x){x/1000}) +
+  facet_wrap(~comparison, ncol = 2) +
+  labs(
+    x = "Window size (kb)",
+    y = "Count"
+  )
+```
+
+```{r}
+ggsave(
+  "~/phd/publications/fisher_pub/figures/supp/window_sizes_zebrafish.png",
+  device = "png",
+  width = 18,
+  height = 6,
+  units = "cm"
+)
+```
